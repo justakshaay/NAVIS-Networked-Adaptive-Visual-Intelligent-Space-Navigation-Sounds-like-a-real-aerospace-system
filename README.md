@@ -175,30 +175,7 @@ python tests/test_backend.py
 python tests/test_e2e_ws.py
 ```
 
----
-
-## 🎬 8. NAVIS Demo Mission Script (60–120s)
-
-Click **RUN DEMO MISSION** in the dashboard to watch an automated 15-stage sequence:
-1. **01_START**: Rover propulsion active. Waypoint tracking initialized.
-2. **02_TRAJ_PRED**: ML kinematic model projects 30s forward path.
-3. **03_SATS_VISIBLE**: Orbiters SAT-01 and SAT-03 enter Martian sky horizon.
-4. **04_PNT_ASSIGNED**: AI Scheduler assigns SAT-01 to primary PNT lock.
-5. **05_IMAGING_ASSIGNED**: Forward anomaly alert. SAT-03 assigned to High-Res IMAGING.
-6. **06_HAZARD_DETECTED**: SAT-03 orbital scan confirms impassable Rock Field ahead.
-7. **07_ROUTE_REPLANNED**: NAVIS executes A* replanning. Safe detour route generated.
-8. **08_COURSE_CORRECTION**: Rover changes heading to follow new safe route.
-9. **09_OUTAGE_INJECTED**: Satellite PNT outage occurs across network.
-10. **10_FALLBACK_ACTIVE**: EKF transitions to autonomous dead reckoning (IMU + VO + Odometry).
-11. **11_AUTONOMOUS_TRANSIT**: Rover navigates through GPS-denied crater sector with expanding uncertainty ellipse.
-12. **12_SATELLITE_RESTORED**: SAT-04 Hermes re-establishes direct line-of-sight PNT.
-13. **13_POSITION_CORRECTED**: Accumulated drift eliminated. Uncertainty contracts to 0.5m.
-14. **14_TARGET_REACHED**: Rover arrives safely at Science Sample Target.
-15. **15_MISSION_COMPLETE**: Performance evaluation matrix compiled and presented.
-
----
-
-## 📡 9. REST API & WebSocket Reference
+## 📡 8. REST API & WebSocket Reference
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -218,11 +195,4 @@ Click **RUN DEMO MISSION** in the dashboard to watch an automated 15-stage seque
 
 ---
 
-## 🏆 10. SIH & Hackathon Presentation Guide
 
-When presenting NAVIS to judges:
-1. **Open on Mode C (Adaptive AI)**: Point out the real-time Mars tactical canvas with rotating satellite beams and EKF uncertainty ellipse ($2\sigma$).
-2. **Trigger "SIMULATE SATELLITE OUTAGE"**: Show how the red `AUTONOMOUS FALLBACK` alert fires, the covariance ellipse smoothly expands, and the rover continues dead-reckoning navigation.
-3. **Trigger "RESTORE SATELLITE"**: Show instantaneous position reconciliation and contraction of uncertainty.
-4. **Click "+ INJECT ROCK HAZARD"** directly on the canvas in front of the rover: Show SAT-03 imaging reconnaissance triggering the A* planner to archive the old path (marked with red $\times$) and transition to the glowing cyan safe detour.
-5. **Click "COMPARE MODES"**: Show the empirical benchmark table demonstrating NAVIS's **78% position error reduction** and **100% obstacle avoidance**.
