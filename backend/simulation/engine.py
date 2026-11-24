@@ -40,6 +40,7 @@ class SimulationEngine:
 
         # Terrain & Atmospheric Subsystems
         self.terrain_preset: str = "procedural"
+        self.terrain_version: int = 1
         self.dust_storm = DustStorm()
         self.was_in_dust_storm: bool = False
 
@@ -375,6 +376,7 @@ class SimulationEngine:
         if preset not in ["procedural", "jezero_crater"]:
             preset = "procedural"
         self.terrain_preset = preset
+        self.terrain_version += 1
         self.terrain = MarsTerrain(
             width_m=600.0,
             height_m=600.0,
@@ -836,6 +838,7 @@ class SimulationEngine:
             "logs": self.logs[-40:],  # last 40 entries
             "terrain_summary": {
                 "preset": self.terrain_preset,
+                "terrain_version": self.terrain_version,
                 "width_m": float(self.terrain.width_m),
                 "height_m": float(self.terrain.height_m),
                 "start_pos": [float(self.terrain.start_pos[0]), float(self.terrain.start_pos[1])],

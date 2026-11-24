@@ -260,6 +260,7 @@ export interface SimulationFullState {
   logs: MissionLogEntry[];
   terrain_summary: {
     preset?: 'procedural' | 'jezero_crater';
+    terrain_version?: number;
     width_m: number;
     height_m: number;
     start_pos: [number, number];

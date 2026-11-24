@@ -15,10 +15,17 @@ interface Mars3DViewProps {
 // ==========================================
 interface TerrainMeshProps {
   terrainSummary: SimulationFullState['terrain_summary'];
+  terrainPreset: 'procedural' | 'jezero_crater';
+  terrainVersion: number;
   getElevation: (x: number, y: number) => number;
 }
 
-const MartianTerrain: React.FC<TerrainMeshProps> = ({ terrainSummary, getElevation }) => {
+const MartianTerrain: React.FC<TerrainMeshProps> = ({
+  terrainSummary,
+  terrainPreset,
+  terrainVersion,
+  getElevation,
+}) => {
   const width = terrainSummary?.width_m || 600;
   const height = terrainSummary?.height_m || 600;
   const grid = terrainSummary?.elevation_grid;
@@ -31,11 +38,11 @@ const MartianTerrain: React.FC<TerrainMeshProps> = ({ terrainSummary, getElevati
     const pos = geom.attributes.position;
     const colors = new Float32Array(pos.count * 3);
 
-    // Color ramp palette:
-    // Low basin = #120D0B, Mid plains = #261A16, Ridges/High = #4A2B20
-    const colorLow = new THREE.Color('#140E0C');
-    const colorMid = new THREE.Color('#281B16');
-    const colorHigh = new THREE.Color('#4E2E22');
+    // Distinct color ramps per terrain preset
+    const isJezero = terrainPreset === 'jezero_crater';
+    const colorLow = new THREE.Color(isJezero ? '#10171D' : '#140E0C');
+    const colorMid = new THREE.Color(isJezero ? '#332219' : '#281B16');
+    const colorHigh = new THREE.Color(isJezero ? '#6B3B24' : '#4E2E22');
     const tempColor = new THREE.Color();
 
     let minElev = 9999;
@@ -75,7 +82,7 @@ const MartianTerrain: React.FC<TerrainMeshProps> = ({ terrainSummary, getElevati
     const wire = geom.clone();
 
     return { geometry: geom, wireGeometry: wire };
-  }, [width, height, grid, getElevation]);
+  }, [width, height, terrainPreset, terrainVersion, grid?.length]);
 
   return (
     <group position={[width / 2, 0, height / 2]}>
@@ -527,7 +534,10 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
         {/* 1. Martian Displaced Terrain Surface */}
         {state && (
           <MartianTerrain
+            key={`${state.terrain_preset || 'procedural'}-${state.terrain_summary?.terrain_version ?? 1}`}
             terrainSummary={state.terrain_summary}
+            terrainPreset={state.terrain_preset || 'procedural'}
+            terrainVersion={state.terrain_summary?.terrain_version ?? 1}
             getElevation={getElevation}
           />
         )}

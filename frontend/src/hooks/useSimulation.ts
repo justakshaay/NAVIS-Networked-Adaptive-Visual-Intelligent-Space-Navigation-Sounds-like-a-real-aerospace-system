@@ -307,13 +307,22 @@ export function useSimulation() {
   }, [sendCommand, apiBase]);
 
   const setTerrainPreset = useCallback((preset: 'procedural' | 'jezero_crater') => {
-    sendCommand({ action: 'set_terrain', preset });
-    fetch(`${apiBase}/api/simulation/terrain`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ preset }),
-    }).catch(() => {});
-  }, [sendCommand, apiBase]);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'set_terrain', preset }));
+    } else {
+      fetch(`${apiBase}/api/simulation/terrain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preset }),
+      })
+        .then(() => fetch(`${apiBase}/api/simulation/state`))
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) processNewSnapshot(data);
+        })
+        .catch(() => {});
+    }
+  }, [apiBase, processNewSnapshot]);
 
   const toggleDustStorm = useCallback((enabled: boolean) => {
     sendCommand({ action: 'toggle_dust_storm', enabled });

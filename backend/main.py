@@ -373,6 +373,12 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                     engine.toggle_swarm_mode(en)
                 elif action == "set_terrain":
                     engine.set_terrain_preset(cmd.get("preset", "procedural"))
+                    payload = json.dumps(engine.get_full_state())
+                    for ws in list(connected_websockets):
+                        try:
+                            await ws.send_text(payload)
+                        except Exception:
+                            connected_websockets.discard(ws)
                 elif action == "toggle_dust_storm":
                     raw_en = cmd.get("enabled", True)
                     en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))

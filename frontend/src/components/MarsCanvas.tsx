@@ -83,6 +83,177 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     }
   }, [followRover, state?.rover.x, state?.rover.y, zoom, canvasDimensions]);
 
+  const terrainPreset = state?.terrain_preset || state?.terrain_summary?.preset || 'procedural';
+  const terrainVersion = state?.terrain_summary?.terrain_version ?? 1;
+  const elevationGrid = state?.terrain_summary?.elevation_grid;
+
+  // Cached offscreen terrain elevation & contour layer (invalidates on terrain_preset / terrain_version / layerContours)
+  const terrainLayerCanvas = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const offscreen = document.createElement('canvas');
+    const size = 300;
+    offscreen.width = size;
+    offscreen.height = size;
+    const octx = offscreen.getContext('2d');
+    if (!octx) return null;
+
+    const isJezero = terrainPreset === 'jezero_crater';
+
+    // Render elevation grid into smooth offscreen heatmap
+    if (elevationGrid && elevationGrid.length > 1) {
+      const rows = elevationGrid.length;
+      const cols = elevationGrid[0].length;
+      let minE = Infinity;
+      let maxE = -Infinity;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const v = elevationGrid[r][c];
+          if (v < minE) minE = v;
+          if (v > maxE) maxE = v;
+        }
+      }
+      const range = Math.max(1, maxE - minE);
+
+      const small = document.createElement('canvas');
+      small.width = cols;
+      small.height = rows;
+      const sctx = small.getContext('2d');
+      if (sctx) {
+        const img = sctx.createImageData(cols, rows);
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const norm = Math.max(0, Math.min(1, (elevationGrid[r][c] - minE) / range));
+            let red = 18;
+            let green = 14;
+            let blue = 13;
+            if (isJezero) {
+              // Jezero Crater: Deep slate-basalt lakebed -> amber-ochre delta -> rust-ochre crater rim
+              if (norm < 0.35) {
+                const t = norm / 0.35;
+                red = Math.round(11 + t * 14);
+                green = Math.round(16 + t * 14);
+                blue = Math.round(22 + t * 10);
+              } else if (norm < 0.68) {
+                const t = (norm - 0.35) / 0.33;
+                red = Math.round(25 + t * 38);
+                green = Math.round(30 + t * 15);
+                blue = Math.round(32 - t * 8);
+              } else {
+                const t = (norm - 0.68) / 0.32;
+                red = Math.round(63 + t * 36);
+                green = Math.round(45 + t * 16);
+                blue = Math.round(24 + t * 10);
+              }
+            } else {
+              // Procedural: Matte obsidian-rust basalt
+              if (norm < 0.5) {
+                const t = norm / 0.5;
+                red = Math.round(14 + t * 18);
+                green = Math.round(11 + t * 12);
+                blue = Math.round(10 + t * 10);
+              } else {
+                const t = (norm - 0.5) / 0.5;
+                red = Math.round(32 + t * 20);
+                green = Math.round(23 + t * 11);
+                blue = Math.round(20 + t * 8);
+              }
+            }
+            const idx = (r * cols + c) * 4;
+            img.data[idx] = red;
+            img.data[idx + 1] = green;
+            img.data[idx + 2] = blue;
+            img.data[idx + 3] = 255;
+          }
+        }
+        sctx.putImageData(img, 0, 0);
+        octx.imageSmoothingEnabled = true;
+        octx.imageSmoothingQuality = 'high';
+        octx.drawImage(small, 0, 0, size, size);
+      }
+    } else {
+      octx.fillStyle = isJezero ? '#10161C' : '#120E0D';
+      octx.fillRect(0, 0, size, size);
+    }
+
+    // Distinct Topographic Contours per preset
+    if (layerContours) {
+      const scalePt = size / 600;
+      if (isJezero) {
+        // 1. Raised Western Crater Rim Ridge contours (X < 140m)
+        octx.strokeStyle = 'rgba(210, 153, 34, 0.24)';
+        octx.lineWidth = 1.2;
+        for (const xRim of [35, 65, 95, 125]) {
+          octx.beginPath();
+          octx.moveTo(xRim * scalePt, 0);
+          octx.bezierCurveTo(
+            (xRim + 14) * scalePt, size * 0.3,
+            (xRim - 10) * scalePt, size * 0.7,
+            (xRim + 8) * scalePt, size
+          );
+          octx.stroke();
+        }
+
+        // 2. Branching River-Delta Escarpment Fan (X = 80..310m)
+        octx.strokeStyle = 'rgba(245, 158, 11, 0.28)';
+        octx.lineWidth = 1.1;
+        for (const fanR of [70, 115, 160, 205, 240]) {
+          octx.beginPath();
+          octx.arc(75 * scalePt, 255 * scalePt, fanR * scalePt, -0.62, 0.72);
+          octx.stroke();
+        }
+
+        // 3. Paleochannel distributary lines across delta
+        octx.strokeStyle = 'rgba(88, 166, 255, 0.12)';
+        octx.setLineDash([4, 4]);
+        octx.beginPath();
+        octx.moveTo(75 * scalePt, 255 * scalePt);
+        octx.quadraticCurveTo(190 * scalePt, 235 * scalePt, 305 * scalePt, 195 * scalePt);
+        octx.moveTo(75 * scalePt, 255 * scalePt);
+        octx.quadraticCurveTo(200 * scalePt, 275 * scalePt, 310 * scalePt, 315 * scalePt);
+        octx.moveTo(75 * scalePt, 255 * scalePt);
+        octx.quadraticCurveTo(175 * scalePt, 310 * scalePt, 265 * scalePt, 365 * scalePt);
+        octx.stroke();
+        octx.setLineDash([]);
+
+        // 4. Ancient Lakebed Basin subtle contours (X > 320m)
+        octx.strokeStyle = 'rgba(139, 148, 158, 0.14)';
+        octx.lineWidth = 0.8;
+        for (const rad of [60, 110, 160]) {
+          octx.beginPath();
+          octx.ellipse(455 * scalePt, 310 * scalePt, rad * scalePt, rad * 0.8 * scalePt, 0.2, 0, Math.PI * 2);
+          octx.stroke();
+        }
+      } else {
+        // Procedural sector contour rings
+        octx.strokeStyle = '#2A1F1B';
+        octx.lineWidth = 0.8;
+        const centerDips = [
+          { x: 180, y: 160, r: 120 },
+          { x: 380, y: 320, r: 160 },
+          { x: 490, y: 180, r: 90 },
+          { x: 250, y: 440, r: 130 },
+        ];
+        for (const ridge of centerDips) {
+          for (let rStep = 30; rStep < ridge.r; rStep += 35) {
+            octx.beginPath();
+            octx.ellipse(
+              ridge.x * scalePt,
+              ridge.y * scalePt,
+              rStep * scalePt,
+              rStep * 0.75 * scalePt,
+              Math.PI / 6,
+              0,
+              Math.PI * 2
+            );
+            octx.stroke();
+          }
+        }
+      }
+    }
+
+    return offscreen;
+  }, [terrainPreset, terrainVersion, elevationGrid?.length, layerContours]);
+
   // Main Canvas Rendering Loop
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -123,57 +294,41 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     ctx.save();
     ctx.beginPath();
     ctx.rect(toCanvasX(0), toCanvasY(0), toWorldDist(worldW), toWorldDist(worldH));
-    ctx.fillStyle = '#120E0D';
+    ctx.fillStyle = terrainPreset === 'jezero_crater' ? '#10161C' : '#120E0D';
     ctx.fill();
-    ctx.strokeStyle = '#21262D';
+    ctx.strokeStyle = terrainPreset === 'jezero_crater' ? '#3B2C1A' : '#21262D';
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.clip();
 
-    // Subtle dark Martian topography gradient
-    const topoGrad = ctx.createRadialGradient(
-      toCanvasX(worldW * 0.45),
-      toCanvasY(worldH * 0.45),
-      toWorldDist(40),
-      toCanvasX(worldW * 0.5),
-      toCanvasY(worldH * 0.5),
-      toWorldDist(worldW * 0.75)
-    );
-    topoGrad.addColorStop(0, '#1E1614');
-    topoGrad.addColorStop(0.5, '#16110F');
-    topoGrad.addColorStop(1, '#0E0B0A');
-    ctx.fillStyle = topoGrad;
-    ctx.fillRect(toCanvasX(0), toCanvasY(0), toWorldDist(worldW), toWorldDist(worldH));
-
-    // Elevation Contours (Procedural Shading & Topographic Contour Rings)
-    if (layerContours) {
-      ctx.strokeStyle = '#2A1F1B';
-      ctx.lineWidth = 0.8;
-
-      // Draw subtle elevation ridges
-      const centerDips = [
-        { x: 180, y: 160, r: 120 },
-        { x: 380, y: 320, r: 160 },
-        { x: 490, y: 180, r: 90 },
-        { x: 250, y: 440, r: 130 },
-      ];
-
-      for (const ridge of centerDips) {
-        for (let rStep = 30; rStep < ridge.r; rStep += 35) {
-          ctx.beginPath();
-          ctx.ellipse(
-            toCanvasX(ridge.x),
-            toCanvasY(ridge.y),
-            toWorldDist(rStep),
-            toWorldDist(rStep * 0.75),
-            Math.PI / 6,
-            0,
-            Math.PI * 2
-          );
-          ctx.stroke();
-        }
-      }
+    // Draw Cached Topographic Elevation & Contour Layer
+    if (terrainLayerCanvas) {
+      ctx.drawImage(
+        terrainLayerCanvas,
+        toCanvasX(0),
+        toCanvasY(0),
+        toWorldDist(worldW),
+        toWorldDist(worldH)
+      );
     }
+
+    // Subtle Map Sector Label
+    ctx.save();
+    ctx.font = 'bold 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    if (terrainPreset === 'jezero_crater') {
+      ctx.fillStyle = 'rgba(210, 153, 34, 0.75)';
+      ctx.fillText('JEZERO CRATER — DELTA SECTOR', toCanvasX(14), toCanvasY(22));
+      ctx.font = '8px "JetBrains Mono", monospace';
+      ctx.fillStyle = 'rgba(139, 148, 158, 0.55)';
+      ctx.fillText('WESTERN RIM', toCanvasX(16), toCanvasY(582));
+      ctx.fillText('DELTA ESCARPMENT', toCanvasX(165), toCanvasY(582));
+      ctx.fillText('ANCIENT LAKEBED BASIN', toCanvasX(395), toCanvasY(582));
+    } else {
+      ctx.fillStyle = 'rgba(139, 148, 158, 0.6)';
+      ctx.fillText('PROCEDURAL — SECTOR 7', toCanvasX(14), toCanvasY(22));
+    }
+    ctx.restore();
 
     // Fine Coordinate Gridlines (every 50 meters)
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
@@ -947,6 +1102,9 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     ctx.restore(); // DPR
   }, [
     state,
+    terrainPreset,
+    terrainVersion,
+    terrainLayerCanvas,
     zoom,
     pan,
     hoverCoord,
