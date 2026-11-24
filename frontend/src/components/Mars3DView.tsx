@@ -585,6 +585,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
             uncertainty={state.shadow_rover.localization_error}
             speed={state.shadow_rover.speed}
             isGhost
+            hideLabel={cameraMode === 'FOLLOW'}
           />
         )}
 
@@ -604,6 +605,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
                 uncertainty={sr.uncertainty_m}
                 speed={sr.speed}
                 assignedSatellite={sr.assigned_satellite_id}
+                hideLabel={cameraMode === 'FOLLOW'}
               />
             ))}
           </>
