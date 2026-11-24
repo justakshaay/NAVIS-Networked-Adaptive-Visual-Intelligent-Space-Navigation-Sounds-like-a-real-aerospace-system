@@ -411,21 +411,54 @@ class SimulationEngine:
         self,
         x: float,
         y: float,
-        radius: float = 30.0,
+        radius: Optional[float] = None,
         hazard_type: str = "ROCK_FIELD",
     ) -> Dict[str, Any]:
-        """Manually or dynamically inject a hazard to prompt route replanning."""
+        """Manually or dynamically inject a hurdle to prompt route replanning."""
         hz = self.terrain.inject_hazard(x, y, radius, hazard_type)
-        self.last_command = f"Hazard ({x:.0f}, {y:.0f}) · A* replan"
-        self.add_log("HAZARD", f"Hazard Injected at ({x:.0f}m, {y:.0f}m): {hazard_type}", "danger")
+        self.last_command = f"{hz['type']} ({x:.0f}, {y:.0f}) · A* replan"
+        self.add_log("HAZARD", f"{hz['type']} placed at ({x:.0f}m, {y:.0f}m) r={hz['radius']:.0f}m", "danger")
 
         # If in Mode C, evaluate immediate replan if along path
         if self.active_mode == NavigationMode.MODE_C:
             replan = self.planner.trigger_replan((self.rover.x, self.rover.y), self.rover.target_pos, "USER_INJECTED_HAZARD")
             self.rover.set_path(replan["new_route"])
-            self.add_log("PLANNER", "A* replanned route to avoid newly injected hazard ✓", "success")
+            self.add_log("PLANNER", "A* replanned route around placed obstacle ✓", "success")
 
         return hz
+
+    def clear_hazards(self) -> None:
+        """Remove all user-placed obstacles and immediately replan route."""
+        self.terrain.clear_injected_hazards()
+        replan = self.planner.trigger_replan(
+            (self.rover.x, self.rover.y),
+            self.rover.target_pos,
+            reason="HAZARDS_CLEARED",
+        )
+        self.rover.set_path(replan["new_route"])
+        self.last_command = "Obstacles cleared · A* replan"
+        self.add_log("HAZARD", "All user-placed obstacles cleared. A* route updated.", "info")
+
+    def generate_map(self, seed: Optional[int] = None) -> int:
+        """Generate a fresh procedural terrain map with a new seed and reset mission."""
+        import random
+        new_seed = int(seed) if seed is not None else random.randint(100, 99999)
+        self.seed = new_seed
+        self.terrain_preset = "procedural"
+        self.terrain_version += 1
+        self.terrain = MarsTerrain(
+            width_m=600.0,
+            height_m=600.0,
+            grid_res=60,
+            seed=new_seed,
+            preset="procedural",
+        )
+        self.planner = AStarPlanner(self.terrain)
+        self.hazard_detector = VisualHazardDetector(self.terrain)
+        self.reset(seed=new_seed)
+        self.last_command = f"New Map (Seed #{new_seed})"
+        self.add_log("TERRAIN", f"NEW MAP GENERATED (SEED #{new_seed})", "warning")
+        return new_seed
 
     def set_terrain_preset(self, preset: str) -> None:
         """Switch terrain preset ('procedural' or 'jezero_crater') and reset mission cleanly."""
@@ -669,10 +702,12 @@ class SimulationEngine:
             # 3. EKF Sensor Fusion Step
             self.latest_ekf = self.ekf.step(dt, self.latest_sensors)
 
-            # 4. Step Rover Kinematics (with hazard escape & stuck recovery)
+            # 4. Step Rover Kinematics (with impassable-hazard escape & stuck recovery)
             escape_heading: Optional[float] = None
             inside_injected_hazard = False
             for hz in self.terrain.injected_hazards:
+                if hz.get("type") == "SAND_TRAP":
+                    continue
                 dist_hz = math.hypot(self.rover.x - hz["x"], self.rover.y - hz["y"])
                 if dist_hz <= hz["radius"] + 2.0:
                     inside_injected_hazard = True

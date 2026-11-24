@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, ChevronDown, Download, Printer, HelpCircle } from 'lucide-react';
+import { FileText, ChevronDown, Download, Printer, HelpCircle, Shuffle } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
 import { Tooltip } from './Tooltip';
 
@@ -11,6 +11,7 @@ interface HeaderProps {
   onToggleDemoGuide?: () => void;
   onStartDemo?: () => void;
   onSetTerrainPreset?: (preset: 'procedural' | 'jezero_crater') => void;
+  onGenerateNewMap?: () => void;
   viewMode?: '2D' | '3D';
   onToggleViewMode?: (mode: '2D' | '3D') => void;
   onOpenDebrief?: () => void;
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleDemoGuide,
   onStartDemo,
   onSetTerrainPreset,
+  onGenerateNewMap,
   viewMode = '2D',
   onToggleViewMode,
   onOpenDebrief,
@@ -104,6 +106,23 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
         </Tooltip>
+
+        {onGenerateNewMap && (
+          <Tooltip
+            title="Generate New Map"
+            description="Synthesizes a fresh procedural Martian elevation map with a new random seed."
+            position="bottom"
+            align="left"
+          >
+            <button
+              onClick={onGenerateNewMap}
+              className="btn-control hidden sm:inline-flex text-xs px-2.5"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+              <span>New Map</span>
+            </button>
+          </Tooltip>
+        )}
 
         {/* 2D / 3D View Segmented Toggle */}
         <Tooltip

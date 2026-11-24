@@ -116,7 +116,14 @@ class MarsTerrain:
     COST_NORMAL = 1.0
     COST_ROCK = 5.0
     COST_SLOPE = 8.0
+    COST_SAND_TRAP = 12.0
     COST_HAZARD = 1000.0
+
+    DEFAULT_HAZARD_RADII = {
+        "ROCK_FIELD": 28.0,
+        "CRATER": 35.0,
+        "SAND_TRAP": 32.0,
+    }
 
     def __init__(
         self,
@@ -320,18 +327,28 @@ class MarsTerrain:
         for hz in self.injected_hazards:
             dist = np.hypot(X - hz["x"], Y - hz["y"])
             mask = dist <= hz["radius"]
-            self.cost_grid[mask] = self.COST_HAZARD
-            self.type_grid[mask] = TerrainType.HAZARD
+            hz_type = hz.get("type", "ROCK_FIELD")
+            if hz_type == "SAND_TRAP":
+                self.cost_grid[mask] = np.maximum(self.cost_grid[mask], self.COST_SAND_TRAP)
+                self.type_grid[mask] = TerrainType.SLOPE
+            elif hz_type == "CRATER":
+                self.cost_grid[mask] = self.COST_HAZARD
+                self.type_grid[mask] = TerrainType.CRATER
+            else:
+                self.cost_grid[mask] = self.COST_HAZARD
+                self.type_grid[mask] = TerrainType.HAZARD
 
     def inject_hazard(
         self,
         x: float,
         y: float,
-        radius: float = 28.0,
+        radius: Optional[float] = None,
         hazard_type: str = "ROCK_FIELD",
         hazard_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Dynamically adds a hazard zone to trigger AI replanning."""
+        """Dynamically adds a hurdle zone (ROCK_FIELD, CRATER, or SAND_TRAP) to trigger AI replanning."""
+        norm_type = hazard_type if hazard_type in self.DEFAULT_HAZARD_RADII else "ROCK_FIELD"
+        resolved_radius = float(radius) if radius is not None else self.DEFAULT_HAZARD_RADII[norm_type]
         if hazard_id is None:
             hazard_id = f"HZ-{len(self.injected_hazards)+1:02d}"
 
@@ -339,8 +356,8 @@ class MarsTerrain:
             "id": hazard_id,
             "x": float(np.clip(x, 0, self.width_m)),
             "y": float(np.clip(y, 0, self.height_m)),
-            "radius": float(radius),
-            "type": hazard_type,
+            "radius": resolved_radius,
+            "type": norm_type,
         }
         self.injected_hazards.append(hazard)
         self._apply_injected_hazards()

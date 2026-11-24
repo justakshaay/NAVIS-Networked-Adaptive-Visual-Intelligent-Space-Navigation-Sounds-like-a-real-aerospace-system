@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
+import { HazardPalette, HazardType } from './HazardPalette';
 
 interface MarsCanvasProps {
   state: SimulationFullState | null;
@@ -23,6 +24,9 @@ interface MarsCanvasProps {
   onSetTarget?: (x: number, y: number) => void;
   lastCommand?: string;
   isHazardModeActive?: boolean;
+  selectedHazardType?: HazardType;
+  onSelectHazardType?: (type: HazardType) => void;
+  onClearHazards?: () => void;
   onCancelHazardMode?: () => void;
 }
 
@@ -32,6 +36,9 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
   onSetTarget,
   lastCommand = 'Standby',
   isHazardModeActive = false,
+  selectedHazardType = 'ROCK_FIELD',
+  onSelectHazardType,
+  onClearHazards,
   onCancelHazardMode,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -421,34 +428,105 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       }
     }
 
-    // 4. Injected / Detected Obstacles
+    // 4. Injected / Detected Obstacles (ROCK_FIELD, CRATER, SAND_TRAP)
     if (state.terrain_summary.injected_hazards) {
       for (const hz of state.terrain_summary.injected_hazards) {
         ctx.save();
         const hx = toCanvasX(hz.x);
         const hy = toCanvasY(hz.y);
         const hrad = toWorldDist(hz.radius);
+        const hzType = hz.type || 'ROCK_FIELD';
 
-        const hzGrad = ctx.createRadialGradient(hx, hy, 2, hx, hy, hrad);
-        hzGrad.addColorStop(0, 'rgba(248, 81, 73, 0.35)');
-        hzGrad.addColorStop(0.7, 'rgba(248, 81, 73, 0.12)');
-        hzGrad.addColorStop(1, 'rgba(248, 81, 73, 0)');
-        ctx.fillStyle = hzGrad;
-        ctx.beginPath();
-        ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
-        ctx.fill();
+        if (hzType === 'CRATER') {
+          // Dark concentric ringed depression
+          const crGrad = ctx.createRadialGradient(hx, hy, hrad * 0.1, hx, hy, hrad);
+          crGrad.addColorStop(0, '#040405');
+          crGrad.addColorStop(0.65, 'rgba(18, 14, 14, 0.92)');
+          crGrad.addColorStop(1, 'rgba(82, 82, 91, 0.25)');
+          ctx.fillStyle = crGrad;
+          ctx.beginPath();
+          ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
+          ctx.fill();
 
-        ctx.strokeStyle = '#F85149';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath();
-        ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
-        ctx.stroke();
+          ctx.strokeStyle = '#71717A';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
+          ctx.stroke();
 
-        ctx.fillStyle = '#F85149';
-        ctx.font = '9px "JetBrains Mono", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(`! ${hz.type || 'HAZARD'}`, hx, hy - hrad - 4);
+          ctx.strokeStyle = 'rgba(248, 81, 73, 0.45)';
+          ctx.setLineDash([2, 3]);
+          ctx.beginPath();
+          ctx.arc(hx, hy, hrad * 0.65, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = '#E4E4E7';
+          ctx.font = '9px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('! CRATER', hx, hy - hrad - 4);
+        } else if (hzType === 'SAND_TRAP') {
+          // Amber/ochre stippled soft regolith hazard zone
+          const sandGrad = ctx.createRadialGradient(hx, hy, 2, hx, hy, hrad);
+          sandGrad.addColorStop(0, 'rgba(217, 119, 6, 0.34)');
+          sandGrad.addColorStop(0.75, 'rgba(217, 119, 6, 0.15)');
+          sandGrad.addColorStop(1, 'rgba(217, 119, 6, 0)');
+          ctx.fillStyle = sandGrad;
+          ctx.beginPath();
+          ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = 'rgba(245, 158, 11, 0.55)';
+          for (let i = 0; i < 8; i++) {
+            const ang = (i * Math.PI) / 4;
+            const rr = hrad * (0.35 + (i % 2) * 0.3);
+            ctx.beginPath();
+            ctx.arc(hx + Math.cos(ang) * rr, hy + Math.sin(ang) * rr, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.strokeStyle = '#F59E0B';
+          ctx.lineWidth = 1.4;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = '#F59E0B';
+          ctx.font = '9px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('! SAND_TRAP', hx, hy - hrad - 4);
+        } else {
+          // ROCK_FIELD: Red dashed boundary + boulder cluster
+          const hzGrad = ctx.createRadialGradient(hx, hy, 2, hx, hy, hrad);
+          hzGrad.addColorStop(0, 'rgba(248, 81, 73, 0.32)');
+          hzGrad.addColorStop(0.7, 'rgba(248, 81, 73, 0.12)');
+          hzGrad.addColorStop(1, 'rgba(248, 81, 73, 0)');
+          ctx.fillStyle = hzGrad;
+          ctx.beginPath();
+          ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#DC2626';
+          for (let i = 0; i < 5; i++) {
+            const ang = (i * Math.PI * 2) / 5;
+            const rr = hrad * 0.42;
+            ctx.beginPath();
+            ctx.arc(hx + Math.cos(ang) * rr, hy + Math.sin(ang) * rr, 2.3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.strokeStyle = '#F85149';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = '#F85149';
+          ctx.font = '9px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(`! ${hzType}`, hx, hy - hrad - 4);
+        }
         ctx.restore();
       }
     }
@@ -1170,8 +1248,7 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       const worldX = (clickX - offsetX) / scale;
       const worldY = (clickY - offsetY) / scale;
 
-      onInjectHazard(worldX, worldY, 28.0, 'ROCK_FIELD');
-      if (onCancelHazardMode) onCancelHazardMode();
+      onInjectHazard(worldX, worldY, undefined, selectedHazardType);
       return;
     }
 
@@ -1496,20 +1573,14 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
           Click map to retask rover
         </div>
 
-        {/* Active Hazard Placement Notice */}
-        {isHazardModeActive && (
-          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-md bg-[#0C0C0E] border border-[#3F3F46] text-[#F4F4F5] text-xs font-medium flex items-center gap-2.5 shadow-xl">
-            <AlertOctagon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>Click anywhere on the map to place a hazard</span>
-            {onCancelHazardMode && (
-              <button
-                onClick={onCancelHazardMode}
-                className="ml-1 px-2 py-0.5 rounded-[4px] bg-[#141417] border border-[#222226] text-[11px] text-[#A1A1AA] hover:text-[#F4F4F5]"
-              >
-                Cancel
-              </button>
-            )}
-          </div>
+        {/* Active Hurdle Placement Palette */}
+        {isHazardModeActive && onSelectHazardType && (
+          <HazardPalette
+            selectedType={selectedHazardType}
+            onSelectType={onSelectHazardType}
+            onClearAll={onClearHazards}
+            onDone={onCancelHazardMode}
+          />
         )}
       </div>
     </div>

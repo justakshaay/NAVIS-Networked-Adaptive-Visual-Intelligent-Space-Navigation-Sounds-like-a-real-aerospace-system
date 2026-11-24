@@ -71,13 +71,17 @@ class DustStormRequest(BaseModel):
 class HazardInjectRequest(BaseModel):
     x: float
     y: float
-    radius: float = 28.0
+    radius: Optional[float] = None
     hazard_type: str = "ROCK_FIELD"
 
 
 class TargetRequest(BaseModel):
     x: float
     y: float
+
+
+class GenerateMapRequest(BaseModel):
+    seed: Optional[int] = None
 
 
 class BenchmarkRequest(BaseModel):
@@ -200,6 +204,20 @@ async def set_target_api(req: TargetRequest):
     tx, ty = engine.set_target(req.x, req.y)
     await broadcast_state()
     return {"status": "SUCCESS", "target_pos": [tx, ty]}
+
+
+@app.post("/api/simulation/generate_map")
+async def generate_map_api(req: Optional[GenerateMapRequest] = None):
+    new_seed = engine.generate_map(req.seed if req else None)
+    await broadcast_state()
+    return {"status": "SUCCESS", "seed": new_seed, "terrain_preset": engine.terrain_preset}
+
+
+@app.post("/api/simulation/clear_hazards")
+async def clear_hazards_api():
+    engine.clear_hazards()
+    await broadcast_state()
+    return {"status": "SUCCESS"}
 
 
 @app.post("/api/simulation/speed")
@@ -360,8 +378,10 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                 action = cmd.get("action")
                 if action == "start":
                     engine.start()
+                    await broadcast_state()
                 elif action == "pause":
                     engine.pause()
+                    await broadcast_state()
                 elif action == "reset":
                     raw_seed = cmd.get("seed")
                     valid_seed = raw_seed if isinstance(raw_seed, int) else None
@@ -369,33 +389,48 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                     await broadcast_state()
                 elif action == "speed":
                     engine.set_speed(cmd.get("multiplier", 1.0))
+                    await broadcast_state()
                 elif action == "mode":
                     engine.set_mode(cmd.get("mode", "MODE_C"))
+                    await broadcast_state()
                 elif action == "outage":
                     engine.set_satellite_outage(True)
+                    await broadcast_state()
                 elif action == "restore":
                     engine.set_satellite_outage(False)
+                    await broadcast_state()
                 elif action == "inject_hazard":
                     engine.inject_hazard(
                         cmd.get("x", 250.0),
                         cmd.get("y", 250.0),
-                        cmd.get("radius", 28.0),
+                        cmd.get("radius"),
                         cmd.get("type", "ROCK_FIELD"),
                     )
+                    await broadcast_state()
+                elif action == "clear_hazards":
+                    engine.clear_hazards()
+                    await broadcast_state()
+                elif action == "generate_map":
+                    raw_seed = cmd.get("seed")
+                    valid_seed = raw_seed if isinstance(raw_seed, int) else None
+                    engine.generate_map(valid_seed)
                     await broadcast_state()
                 elif action == "set_target":
                     engine.set_target(float(cmd.get("x", 540.0)), float(cmd.get("y", 530.0)))
                     await broadcast_state()
                 elif action == "demo":
                     engine.demo_runner.start_demo()
+                    await broadcast_state()
                 elif action == "toggle_shadow_race":
                     raw_en = cmd.get("enabled", True)
                     en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))
                     engine.toggle_shadow_race(en)
+                    await broadcast_state()
                 elif action == "toggle_swarm_mode":
                     raw_en = cmd.get("enabled", True)
                     en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))
                     engine.toggle_swarm_mode(en)
+                    await broadcast_state()
                 elif action == "set_terrain":
                     engine.set_terrain_preset(cmd.get("preset", "procedural"))
                     await broadcast_state()
@@ -403,6 +438,7 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                     raw_en = cmd.get("enabled", True)
                     en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))
                     engine.toggle_dust_storm(en)
+                    await broadcast_state()
             except Exception as e:
                 logger.error(f"Error handling WebSocket message: {e}")
 

@@ -5,6 +5,7 @@ import { OrbitControls, Stars, Html, Line } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { Camera, Eye, Radio, Compass, AlertOctagon, Wind, Layers, Maximize2 } from 'lucide-react';
 import { SimulationFullState, SatelliteState, RoverState, SwarmRoverState } from '../types/simulation';
+import { HazardPalette, HazardType } from './HazardPalette';
 
 interface Mars3DViewProps {
   state: SimulationFullState | null;
@@ -12,6 +13,9 @@ interface Mars3DViewProps {
   onSetTarget?: (x: number, y: number) => void;
   lastCommand?: string;
   isHazardModeActive?: boolean;
+  selectedHazardType?: HazardType;
+  onSelectHazardType?: (type: HazardType) => void;
+  onClearHazards?: () => void;
   onCancelHazardMode?: () => void;
 }
 
@@ -417,6 +421,9 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({
   onSetTarget,
   lastCommand = 'Standby',
   isHazardModeActive = false,
+  selectedHazardType = 'ROCK_FIELD',
+  onSelectHazardType,
+  onClearHazards,
   onCancelHazardMode,
 }) => {
   const controlsRef = useRef<OrbitControlsImpl>(null);
@@ -605,7 +612,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({
             isHazardModeActive={isHazardModeActive}
             onTerrainClick={(wx, wz) => {
               if (isHazardModeActive) {
-                onInjectHazard?.(wx, wz, 28.0, 'ROCK_FIELD');
+                onInjectHazard?.(wx, wz, undefined, selectedHazardType);
               } else {
                 onSetTarget?.(wx, wz);
               }
@@ -704,23 +711,63 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({
           />
         )}
 
-        {/* 6. Dynamic Injected Hazards */}
+        {/* 6. Dynamic Injected Obstacles (ROCK_FIELD, CRATER, SAND_TRAP) */}
         {state?.terrain_summary?.injected_hazards?.map((hz, idx) => {
           const hzElev = getElevation(hz.x, hz.y);
+          const hzType = hz.type || 'ROCK_FIELD';
           return (
             <group
-              key={`${idx}-${Math.round(hz.x)}-${Math.round(hz.y)}`}
+              key={`${idx}-${hzType}-${Math.round(hz.x)}-${Math.round(hz.y)}`}
               position={[hz.x, hzElev, hz.y]}
             >
-              <mesh position={[0, 4, 0]}>
-                <cylinderGeometry args={[hz.radius * 0.7, hz.radius * 0.8, 8, 16]} />
-                <meshStandardMaterial color="#F85149" roughness={0.7} />
-              </mesh>
-              {/* Pulsing ring warning perimeter */}
-              <mesh position={[0, 0.4, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[hz.radius * 0.9, hz.radius, 32]} />
-                <meshBasicMaterial color="#F85149" transparent opacity={0.6} side={THREE.DoubleSide} />
-              </mesh>
+              {hzType === 'CRATER' ? (
+                <>
+                  {/* Dark sunken crater pit + raised outer rim torus */}
+                  <mesh position={[0, 0.25, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <circleGeometry args={[hz.radius * 0.85, 32]} />
+                    <meshStandardMaterial color="#09090B" roughness={0.95} />
+                  </mesh>
+                  <mesh position={[0, 1.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                    <torusGeometry args={[hz.radius * 0.88, 2.2, 10, 32]} />
+                    <meshStandardMaterial color="#3F3F46" roughness={0.9} />
+                  </mesh>
+                  <mesh position={[0, 0.4, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <ringGeometry args={[hz.radius * 0.94, hz.radius, 32]} />
+                    <meshBasicMaterial color="#F85149" transparent opacity={0.45} side={THREE.DoubleSide} />
+                  </mesh>
+                </>
+              ) : hzType === 'SAND_TRAP' ? (
+                <>
+                  {/* Amber/ochre soft regolith dune patch */}
+                  <mesh position={[0, 0.35, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <circleGeometry args={[hz.radius * 0.9, 32]} />
+                    <meshStandardMaterial color="#B45309" transparent opacity={0.55} roughness={0.95} />
+                  </mesh>
+                  <mesh position={[0, 0.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <ringGeometry args={[hz.radius * 0.92, hz.radius, 32]} />
+                    <meshBasicMaterial color="#F59E0B" transparent opacity={0.75} side={THREE.DoubleSide} />
+                  </mesh>
+                </>
+              ) : (
+                <>
+                  {/* ROCK_FIELD boulder cluster */}
+                  {[
+                    [0, 3.2, 0, 0.36],
+                    [hz.radius * 0.38, 2.2, hz.radius * 0.2, 0.24],
+                    [-hz.radius * 0.35, 2.4, -hz.radius * 0.25, 0.26],
+                    [-hz.radius * 0.2, 1.8, hz.radius * 0.38, 0.2],
+                  ].map(([bx, by, bz, br], bIdx) => (
+                    <mesh key={bIdx} position={[bx, by, bz]}>
+                      <dodecahedronGeometry args={[hz.radius * br, 0]} />
+                      <meshStandardMaterial color="#991B1B" roughness={0.85} />
+                    </mesh>
+                  ))}
+                  <mesh position={[0, 0.4, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <ringGeometry args={[hz.radius * 0.9, hz.radius, 32]} />
+                    <meshBasicMaterial color="#F85149" transparent opacity={0.65} side={THREE.DoubleSide} />
+                  </mesh>
+                </>
+              )}
             </group>
           );
         })}
@@ -823,20 +870,14 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({
         </button>
       </div>
 
-      {/* Active Hazard Placement Notice */}
-      {isHazardModeActive && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-md bg-[#0C0C0E] border border-[#3F3F46] text-[#F4F4F5] font-sans text-xs font-medium flex items-center gap-2.5 shadow-xl">
-          <AlertOctagon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-          <span>Click anywhere on the 3D terrain to place a hazard</span>
-          {onCancelHazardMode && (
-            <button
-              onClick={onCancelHazardMode}
-              className="ml-1 px-2 py-0.5 rounded-[4px] bg-[#141417] border border-[#222226] text-[11px] text-[#A1A1AA] hover:text-[#F4F4F5]"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
+      {/* Active Hurdle Placement Palette */}
+      {isHazardModeActive && onSelectHazardType && (
+        <HazardPalette
+          selectedType={selectedHazardType}
+          onSelectType={onSelectHazardType}
+          onClearAll={onClearHazards}
+          onDone={onCancelHazardMode}
+        />
       )}
 
       {/* Live Engine & Command Indicator (Bottom-Left above dock) */}

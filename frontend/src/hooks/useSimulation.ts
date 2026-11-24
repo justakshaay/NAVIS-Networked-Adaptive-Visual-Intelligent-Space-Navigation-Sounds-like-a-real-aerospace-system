@@ -29,12 +29,15 @@ export function useSimulation() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const reconnectDelayRef = useRef<number>(1500);
+  const isUnmountedRef = useRef<boolean>(false);
 
   // Dynamic API & WS Base Resolution (supports separate Vercel frontend + Render backend via VITE_API_URL / VITE_WS_URL)
+  const rawApiEnv = (import.meta.env.VITE_API_URL || '').trim();
   const apiBase = (
-    import.meta.env.VITE_API_URL ||
+    rawApiEnv ||
     (typeof window !== 'undefined' && window.location.port === '5173' ? 'http://127.0.0.1:8000' : '')
-  ).replace(/\/$/, '');
+  ).replace(/\/+$/, '');
 
   // Process incoming simulation snapshot
   const processNewSnapshot = useCallback((data: SimulationFullState) => {
@@ -130,24 +133,47 @@ export function useSimulation() {
     }
   }, []);
 
-  // Connect to WebSocket
+  // Resolve WebSocket URL cleanly for Vercel+Render, single-origin Docker, and local dev
+  const resolveWsUrl = useCallback(() => {
+    const rawWsEnv = (import.meta.env.VITE_WS_URL || '').trim().replace(/\/+$/, '');
+    if (rawWsEnv) {
+      const normalized = rawWsEnv
+        .replace(/^https:\/\//i, 'wss://')
+        .replace(/^http:\/\//i, 'ws://');
+      return normalized.endsWith('/ws/simulation') ? normalized : `${normalized}/ws/simulation`;
+    }
+    if (apiBase) {
+      return `${apiBase.replace(/^http/i, 'ws')}/ws/simulation`;
+    }
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws/simulation`;
+  }, [apiBase]);
+
+  // Connect to WebSocket with capped exponential backoff (1.5s -> 3s -> 5s)
   const connectWs = useCallback(() => {
+    if (isUnmountedRef.current) return;
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl =
-      import.meta.env.VITE_WS_URL ||
-      (window.location.port === '5173'
-        ? `${protocol}//${window.location.hostname}:8000/ws/simulation`
-        : `${protocol}//${window.location.host}/ws/simulation`);
+
+    const wsUrl = resolveWsUrl();
+
+    const scheduleReconnect = () => {
+      if (isUnmountedRef.current) return;
+      const delay = reconnectDelayRef.current;
+      reconnectDelayRef.current = delay < 3000 ? 3000 : 5000;
+      reconnectTimeoutRef.current = window.setTimeout(() => {
+        connectWs();
+      }, delay);
+    };
 
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        reconnectDelayRef.current = 1500;
         setConnected(true);
       };
 
@@ -162,10 +188,7 @@ export function useSimulation() {
 
       ws.onclose = () => {
         setConnected(false);
-        // Attempt reconnect after 1.5s
-        reconnectTimeoutRef.current = window.setTimeout(() => {
-          connectWs();
-        }, 1500);
+        scheduleReconnect();
       };
 
       ws.onerror = () => {
@@ -174,15 +197,22 @@ export function useSimulation() {
       };
     } catch (e) {
       console.error('Failed to create WebSocket:', e);
-      reconnectTimeoutRef.current = window.setTimeout(connectWs, 2000);
+      scheduleReconnect();
     }
-  }, [processNewSnapshot]);
+  }, [resolveWsUrl, processNewSnapshot]);
 
   useEffect(() => {
+    isUnmountedRef.current = false;
     connectWs();
     return () => {
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (wsRef.current) wsRef.current.close();
+      isUnmountedRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
   }, [connectWs]);
 
@@ -354,8 +384,14 @@ export function useSimulation() {
     }
   }, [apiBase, processNewSnapshot]);
 
-  const injectHazard = useCallback((x: number, y: number, radius = 28.0, type = 'ROCK_FIELD') => {
-    setLastCommand(`Hazard (${Math.round(x)}, ${Math.round(y)}) · A* replan`);
+  const injectHazard = useCallback((x: number, y: number, radius?: number, type = 'ROCK_FIELD') => {
+    const defaultRadii: Record<string, number> = {
+      ROCK_FIELD: 28.0,
+      CRATER: 35.0,
+      SAND_TRAP: 32.0,
+    };
+    const resolvedRadius = radius ?? defaultRadii[type] ?? 28.0;
+    setLastCommand(`${type} (${Math.round(x)}, ${Math.round(y)}) · A* replan`);
     // Optimistically render the injected hazard immediately before WebSocket confirmation arrives
     setLiveState((prev) => {
       if (!prev || !prev.terrain_summary) return prev;
@@ -363,7 +399,7 @@ export function useSimulation() {
         id: `HZ-OPT-${Date.now()}`,
         x,
         y,
-        radius,
+        radius: resolvedRadius,
         type,
       };
       return {
@@ -376,12 +412,67 @@ export function useSimulation() {
     });
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ action: 'inject_hazard', x, y, radius, type }));
+      wsRef.current.send(JSON.stringify({ action: 'inject_hazard', x, y, radius: resolvedRadius, type }));
     } else {
       fetch(`${apiBase}/api/hazard/inject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ x, y, radius, hazard_type: type }),
+        body: JSON.stringify({ x, y, radius: resolvedRadius, hazard_type: type }),
+      })
+        .then(() => fetch(`${apiBase}/api/simulation/state`))
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) processNewSnapshot(data);
+        })
+        .catch(() => {});
+    }
+  }, [apiBase, processNewSnapshot]);
+
+  const clearHazards = useCallback(() => {
+    setLastCommand('Obstacles cleared · A* replan');
+    setLiveState((prev) => {
+      if (!prev || !prev.terrain_summary) return prev;
+      return {
+        ...prev,
+        terrain_summary: {
+          ...prev.terrain_summary,
+          injected_hazards: [],
+        },
+      };
+    });
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'clear_hazards' }));
+    } else {
+      fetch(`${apiBase}/api/simulation/clear_hazards`, { method: 'POST' })
+        .then(() => fetch(`${apiBase}/api/simulation/state`))
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) processNewSnapshot(data);
+        })
+        .catch(() => {});
+    }
+  }, [apiBase, processNewSnapshot]);
+
+  const generateNewMap = useCallback((seed?: number) => {
+    const validSeed = typeof seed === 'number' && Number.isFinite(seed) ? seed : undefined;
+    telemetryBufferRef.current = [];
+    setBufferLength(0);
+    setEvents([]);
+    setIsReplaying(false);
+    setReplayIndex(0);
+    setIsReplayPlaying(false);
+    setLastCommand('Generating new map...');
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify(validSeed !== undefined ? { action: 'generate_map', seed: validSeed } : { action: 'generate_map' })
+      );
+    } else {
+      fetch(`${apiBase}/api/simulation/generate_map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seed: validSeed ?? null }),
       })
         .then(() => fetch(`${apiBase}/api/simulation/state`))
         .then((res) => (res.ok ? res.json() : null))
@@ -496,6 +587,8 @@ export function useSimulation() {
     setTerrainPreset,
     toggleDustStorm,
     setTarget,
+    clearHazards,
+    generateNewMap,
     lastCommand: state?.last_command || lastCommand,
     runBenchmark,
     clearBenchmark: () => setBenchmarkResult(null),

@@ -14,6 +14,7 @@ import { BenchmarkModal } from './components/BenchmarkModal';
 import { DemoScenarioGuide } from './components/DemoScenarioGuide';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { generateDebriefData, exportTelemetryCsv } from './utils/exportReport';
+import { HazardType } from './components/HazardPalette';
 import { Layers, Satellite, Terminal } from 'lucide-react';
 
 const Mars3DView = lazy(() => import('./components/Mars3DView'));
@@ -48,6 +49,8 @@ export function App() {
     setTerrainPreset,
     toggleDustStorm,
     setTarget,
+    clearHazards,
+    generateNewMap,
     lastCommand,
     runBenchmark,
   } = useSimulation();
@@ -58,6 +61,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'GNC' | 'ORBITAL' | 'AI'>('GNC');
   const [isDemoGuideVisible, setIsDemoGuideVisible] = useState<boolean>(true);
   const [isHazardMode, setIsHazardMode] = useState<boolean>(false);
+  const [selectedHazardType, setSelectedHazardType] = useState<HazardType>('ROCK_FIELD');
   const [isReplayOpen, setIsReplayOpen] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'2D' | '3D'>('2D');
 
@@ -130,6 +134,10 @@ export function App() {
       else if (e.key === 'r' || e.key === 'R') {
         resetMission();
       }
+      // Escape: Exit obstacle placement mode
+      else if (e.key === 'Escape') {
+        setIsHazardMode(false);
+      }
       // ?: Toggle Shortcuts Modal
       else if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
         setIsShortcutsModalOpen((prev) => !prev);
@@ -167,6 +175,7 @@ export function App() {
         onToggleDemoGuide={() => setIsDemoGuideVisible((v) => !v)}
         onStartDemo={runDemo}
         onSetTerrainPreset={setTerrainPreset}
+        onGenerateNewMap={generateNewMap}
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
         onOpenDebrief={() => setIsDebriefModalOpen(true)}
@@ -191,16 +200,26 @@ export function App() {
 
           {/* Full-Height Tactical Mars Viewport (2D Canvas or 3D Orbital Scene) */}
           <div className="flex-1 min-h-0 relative">
+            {/* Subtle Non-Blocking Cold-Start Status Pill */}
+            {!connected && !liveState && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#0C0C0E]/90 backdrop-blur-md border border-[#222226] text-xs text-[#A1A1AA] shadow-xl pointer-events-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                <span>Connecting to NAVIS backend… (cold start can take ~30s)</span>
+              </div>
+            )}
+
             {viewMode === '2D' ? (
               <MarsCanvas
                 state={state}
                 onInjectHazard={(x, y, rad, type) => {
-                  injectHazard(x, y, rad, type);
-                  setIsHazardMode(false);
+                  injectHazard(x, y, rad, type || selectedHazardType);
                 }}
                 onSetTarget={setTarget}
                 lastCommand={lastCommand}
                 isHazardModeActive={isHazardMode}
+                selectedHazardType={selectedHazardType}
+                onSelectHazardType={setSelectedHazardType}
+                onClearHazards={clearHazards}
                 onCancelHazardMode={() => setIsHazardMode(false)}
               />
             ) : (
@@ -215,12 +234,14 @@ export function App() {
                 <Mars3DView
                   state={state}
                   onInjectHazard={(x, y, rad, type) => {
-                    injectHazard(x, y, rad, type);
-                    setIsHazardMode(false);
+                    injectHazard(x, y, rad, type || selectedHazardType);
                   }}
                   onSetTarget={setTarget}
                   lastCommand={lastCommand}
                   isHazardModeActive={isHazardMode}
+                  selectedHazardType={selectedHazardType}
+                  onSelectHazardType={setSelectedHazardType}
+                  onClearHazards={clearHazards}
                   onCancelHazardMode={() => setIsHazardMode(false)}
                 />
               </Suspense>
