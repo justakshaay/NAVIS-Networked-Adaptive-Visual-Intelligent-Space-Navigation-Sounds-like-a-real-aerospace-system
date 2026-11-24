@@ -178,6 +178,27 @@ def test_swarm_mode():
     print("[OK] Multi-rover swarm mode toggle & stepping verified.")
 
 
+def test_hazard_escape_no_deadlock():
+    print("Testing Hazard Injection Directly On/Ahead of Rover (No Deadlock)...")
+    engine = SimulationEngine(seed=42)
+    engine.start()
+    for _ in range(10):
+        engine.step(0.05)
+
+    # Inject hazard directly on top of the rover
+    rx, ry = engine.rover.x, engine.rover.y
+    engine.inject_hazard(rx, ry, radius=28.0, hazard_type="ROCK_FIELD")
+
+    # Step forward 60 ticks (3.0s) and confirm rover escapes and keeps advancing
+    for _ in range(60):
+        engine.step(0.05)
+
+    dist_moved = math.hypot(engine.rover.x - rx, engine.rover.y - ry)
+    assert engine.rover.speed > 0.2, f"Rover stalled inside hazard: speed={engine.rover.speed}"
+    assert dist_moved > 2.0, f"Rover stuck inside hazard: moved only {dist_moved:.2f}m"
+    print(f"[OK] Rover escaped direct hazard: moved {dist_moved:.2f}m, speed={engine.rover.speed:.2f}m/s")
+
+
 if __name__ == "__main__":
     test_terrain_and_planner()
     test_ekf_and_sensors()
@@ -185,5 +206,6 @@ if __name__ == "__main__":
     test_simulation_engine_and_benchmark()
     test_jezero_crater_and_dust_storm()
     test_swarm_mode()
+    test_hazard_escape_no_deadlock()
     print("\nALL BACKEND VERIFICATION TESTS PASSED SUCCESSFULLY!")
 

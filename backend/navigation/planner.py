@@ -22,6 +22,70 @@ class AStarPlanner:
         self.replanned_count = 0
         self.last_replan_reason = ""
 
+    def _build_padded_cost_grid(self, cost_grid: np.ndarray) -> np.ndarray:
+        """Inflate hazard cells by a 1-cell safety margin so paths do not graze hazard edges."""
+        padded = cost_grid.copy()
+        hazard_mask = cost_grid >= self.terrain.COST_HAZARD
+        if not np.any(hazard_mask):
+            return padded
+
+        grid_res = self.terrain.grid_res
+        ys, xs = np.where(hazard_mask)
+        margin_cost = self.terrain.COST_HAZARD * 0.6
+        for gy, gx in zip(ys, xs):
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    ny, nx = gy + dy, gx + dx
+                    if 0 <= nx < grid_res and 0 <= ny < grid_res:
+                        if padded[ny, nx] < margin_cost:
+                            padded[ny, nx] = margin_cost
+        return padded
+
+    def _find_nearest_free_cell(
+        self,
+        start_gx: int,
+        start_gy: int,
+        start_world: Tuple[float, float],
+        cost_grid: np.ndarray,
+    ) -> Optional[Tuple[int, int]]:
+        """Find nearest non-hazard grid cell, preferring the outward normal from enclosing hazards."""
+        grid_res = self.terrain.grid_res
+        # Check if inside an injected hazard to bias toward outward radial normal
+        outward_dx, outward_dy = 0.0, 0.0
+        for hz in getattr(self.terrain, "injected_hazards", []):
+            dx = start_world[0] - hz["x"]
+            dy = start_world[1] - hz["y"]
+            dist = math.hypot(dx, dy)
+            if dist <= hz["radius"] + self.terrain.cell_size:
+                if dist < 1e-3:
+                    outward_dx, outward_dy = 1.0, 0.0
+                else:
+                    outward_dx, outward_dy = dx / dist, dy / dist
+                break
+
+        best_cell: Optional[Tuple[int, int]] = None
+        best_score = float("inf")
+        for r in range(1, 10):
+            for dy in range(-r, r + 1):
+                for dx in range(-r, r + 1):
+                    if max(abs(dx), abs(dy)) != r:
+                        continue
+                    nx, ny = start_gx + dx, start_gy + dy
+                    if 0 <= nx < grid_res and 0 <= ny < grid_res:
+                        if float(cost_grid[ny, nx]) < self.terrain.COST_HAZARD:
+                            step_norm = math.hypot(dx, dy)
+                            align_bonus = 0.0
+                            if outward_dx != 0.0 or outward_dy != 0.0:
+                                dot = (dx / step_norm) * outward_dx + (dy / step_norm) * outward_dy
+                                align_bonus = -dot * 1.5
+                            score = step_norm + align_bonus
+                            if score < best_score:
+                                best_score = score
+                                best_cell = (nx, ny)
+            if best_cell is not None:
+                return best_cell
+        return None
+
     def plan_path(
         self,
         start_world: Tuple[float, float],
@@ -34,11 +98,26 @@ class AStarPlanner:
         if cost_grid is None:
             cost_grid = self.terrain.cost_grid
 
+        padded_grid = self._build_padded_cost_grid(cost_grid)
+
         grid_res = self.terrain.grid_res
         cell_size = self.terrain.cell_size
 
-        start_gx, start_gy = self.terrain.world_to_grid(start_world[0], start_world[1])
+        orig_start_gx, orig_start_gy = self.terrain.world_to_grid(start_world[0], start_world[1])
         goal_gx, goal_gy = self.terrain.world_to_grid(goal_world[0], goal_world[1])
+
+        escape_world: Optional[Tuple[float, float]] = None
+        start_gx, start_gy = orig_start_gx, orig_start_gy
+
+        # If start cell is inside a hazard, escape to nearest free cell first
+        if float(cost_grid[orig_start_gy, orig_start_gx]) >= self.terrain.COST_HAZARD:
+            free_cell = self._find_nearest_free_cell(orig_start_gx, orig_start_gy, start_world, cost_grid)
+            if free_cell is not None:
+                start_gx, start_gy = free_cell
+                escape_world = (
+                    start_gx * cell_size + cell_size * 0.5,
+                    start_gy * cell_size + cell_size * 0.5,
+                )
 
         # Priority queue for open set: (f_score, h_score, (gx, gy))
         open_set: List[Tuple[float, float, Tuple[int, int]]] = []
@@ -81,6 +160,7 @@ class AStarPlanner:
 
             cgx, cgy = current
             current_g = g_score[current]
+            current_in_hazard = float(cost_grid[cgy, cgx]) >= self.terrain.COST_HAZARD
 
             for dx, dy, step_len in neighbors:
                 ngx, ngy = cgx + dx, cgy + dy
@@ -89,9 +169,9 @@ class AStarPlanner:
                 if not (0 <= ngx < grid_res and 0 <= ngy < grid_res):
                     continue
 
-                cell_cost = float(cost_grid[ngy, ngx])
-                # Impassable hazard
-                if cell_cost >= self.terrain.COST_HAZARD:
+                cell_cost = float(padded_grid[ngy, ngx])
+                # Allow stepping out if currently inside a hazard cell; otherwise block hazards
+                if not current_in_hazard and float(cost_grid[ngy, ngx]) >= self.terrain.COST_HAZARD:
                     continue
 
                 # Edge cost = step distance * cell traversal cost
@@ -108,6 +188,8 @@ class AStarPlanner:
 
         if not found:
             # Fallback direct line if completely blocked
+            if escape_world is not None:
+                return [start_world, escape_world, goal_world]
             return [start_world, goal_world]
 
         # Reconstruct grid path
@@ -129,10 +211,12 @@ class AStarPlanner:
         ]
 
         # Smooth waypoints (reduce redundant collinear grid nodes)
-        smoothed = self._smooth_path(world_path, cost_grid)
-        # Ensure exact start and goal
-        if smoothed:
+        smoothed = self._smooth_path(world_path, padded_grid)
+        if escape_world is not None:
+            smoothed = [start_world, escape_world] + smoothed[1:]
+        elif smoothed:
             smoothed[0] = start_world
+        if smoothed:
             smoothed[-1] = goal_world
 
         return smoothed

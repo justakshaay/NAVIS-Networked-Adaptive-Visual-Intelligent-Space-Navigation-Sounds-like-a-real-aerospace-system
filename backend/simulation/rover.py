@@ -105,6 +105,7 @@ class MarsRover:
         terrain_slope: float = 0.0,
         is_outage: bool = False,
         in_dust_storm: bool = False,
+        escape_heading: Optional[float] = None,
     ) -> None:
         """
         Step kinematics using pure pursuit along active_path.
@@ -141,8 +142,11 @@ class MarsRover:
 
             target_pt = self.active_path[self.current_waypoint_idx]
 
-        # Steering control towards target waypoint
-        target_heading = math.atan2(target_pt[1] - self.y, target_pt[0] - self.x)
+        # Steering control towards target waypoint or radial escape heading
+        if escape_heading is not None:
+            target_heading = escape_heading
+        else:
+            target_heading = math.atan2(target_pt[1] - self.y, target_pt[0] - self.x)
         angle_diff = (target_heading - self.heading + math.pi) % (2 * math.pi) - math.pi
 
         # Limit angular rate
@@ -152,10 +156,11 @@ class MarsRover:
         self.heading += self.angular_velocity * dt
         self.heading = (self.heading + math.pi) % (2 * math.pi) - math.pi
 
-        # Target Speed adjusted by terrain roughness and curvature
-        curvature_factor = max(0.3, 1.0 - abs(angle_diff) / math.pi)
-        cost_penalty = 1.0 / (1.0 + 0.2 * (terrain_cost - 1.0))
-        target_speed = self.max_speed * curvature_factor * cost_penalty
+        # Target Speed adjusted by terrain roughness and curvature (capped so hazards never zero-lock speed)
+        curvature_factor = max(0.35, 1.0 - abs(angle_diff) / math.pi)
+        effective_cost = min(terrain_cost, 4.0 if escape_heading is not None else 10.0)
+        cost_penalty = 1.0 / (1.0 + 0.2 * (effective_cost - 1.0))
+        target_speed = max(0.8, self.max_speed * curvature_factor * cost_penalty)
 
         # Accelerate / Decelerate
         speed_error = target_speed - self.speed

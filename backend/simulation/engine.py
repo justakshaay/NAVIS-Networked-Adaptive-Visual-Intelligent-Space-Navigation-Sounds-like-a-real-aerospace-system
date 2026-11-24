@@ -4,12 +4,12 @@ Integrates all physics, sensor models, EKF fusion, AI constellation scheduling,
 trajectory prediction, hazard detection, A* planning, and WebSocket broadcast loops.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 import math
 from datetime import datetime
 
 from backend.simulation.terrain import MarsTerrain, DustStorm
-from backend.simulation.rover import MarsRover
+from backend.simulation.rover import MarsRover, RoverMissionStatus
 from backend.simulation.satellites import SatelliteConstellation
 from backend.simulation.metrics import PerformanceMetrics
 from backend.simulation.modes import NavigationMode, ModeConfig
@@ -64,6 +64,9 @@ class SimulationEngine:
 
         # Shadow Race (Mode A vs Mode C) Subsystem
         self.shadow_race_enabled: bool = False
+        self._last_progress_check_time: float = 0.0
+        self._last_progress_pos: Tuple[float, float] = (self.rover.x, self.rover.y)
+        self._escape_replan_cooldown: float = 0.0
         self.shadow_rover: Optional[MarsRover] = None
         self.shadow_sensors: Optional[SensorSuite] = None
         self.shadow_ekf: Optional[NAVIS_EKF] = None
@@ -613,7 +616,19 @@ class SimulationEngine:
             # 3. EKF Sensor Fusion Step
             self.latest_ekf = self.ekf.step(dt, self.latest_sensors)
 
-            # 4. Step Rover Kinematics
+            # 4. Step Rover Kinematics (with hazard escape & stuck recovery)
+            escape_heading: Optional[float] = None
+            inside_injected_hazard = False
+            for hz in self.terrain.injected_hazards:
+                dist_hz = math.hypot(self.rover.x - hz["x"], self.rover.y - hz["y"])
+                if dist_hz <= hz["radius"] + 2.0:
+                    inside_injected_hazard = True
+                    if dist_hz < 0.2:
+                        escape_heading = self.rover.heading
+                    else:
+                        escape_heading = math.atan2(self.rover.y - hz["y"], self.rover.x - hz["x"])
+                    break
+
             self.rover.update(
                 dt=dt,
                 sim_time=self.sim_time,
@@ -621,7 +636,28 @@ class SimulationEngine:
                 terrain_slope=terrain_slope,
                 is_outage=(not pnt_available),
                 in_dust_storm=rover_in_storm,
+                escape_heading=escape_heading,
             )
+
+            # Stuck recovery check (if navigating and fails to advance > 0.5m over 1.5s)
+            if (
+                self.rover.mission_status != RoverMissionStatus.TARGET_REACHED
+                and (self.sim_time - self._last_progress_check_time) >= 1.5
+            ):
+                moved = math.hypot(
+                    self.rover.x - self._last_progress_pos[0],
+                    self.rover.y - self._last_progress_pos[1],
+                )
+                self._last_progress_check_time = self.sim_time
+                self._last_progress_pos = (self.rover.x, self.rover.y)
+                if moved < 0.5 and self.active_mode == NavigationMode.MODE_C:
+                    replan_res = self.planner.trigger_replan(
+                        (self.rover.x, self.rover.y),
+                        self.rover.target_pos,
+                        reason="STUCK_RECOVERY",
+                    )
+                    self.rover.set_path(replan_res["new_route"])
+                    self.add_log("PLANNER", "Stuck recovery: A* replanned escape route ✓", "warning")
 
             # 5. AI Trajectory Prediction & Hazard Reconnaissance (Mode C)
             if self.active_mode == NavigationMode.MODE_C:
@@ -644,7 +680,12 @@ class SimulationEngine:
                 )
                 self.latest_hazard_alert = hz_scan
 
-                if hz_scan["needs_replan"]:
+                if (
+                    hz_scan["needs_replan"]
+                    and not inside_injected_hazard
+                    and (self.sim_time - self._escape_replan_cooldown) >= 0.8
+                ):
+                    self._escape_replan_cooldown = self.sim_time
                     alert = hz_scan["active_alert"]
                     self.add_log(
                         "HAZARD",
