@@ -274,7 +274,7 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     ctx.scale(dpr, dpr);
 
     // Matte Obsidian Base Background
-    ctx.fillStyle = '#080A0D';
+    ctx.fillStyle = '#09090B';
     ctx.fillRect(0, 0, viewW, viewH);
 
     // Coordinate Scale & Offsets
@@ -1224,31 +1224,11 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
   }, [state]);
 
   return (
-    <div className="relative w-full h-full flex flex-col bg-[#080A0D] overflow-hidden select-none">
-      {/* Sub-Header Status Strip */}
-      <div className="panel-header shrink-0">
-        <div className="flex items-center gap-1.5">
-          <Crosshair className="w-3.5 h-3.5 text-[#58A6FF]" />
-          <span>MARS TACTICAL SURFACE & ORBITAL RADAR</span>
-          <span className="text-[#6E7681] text-[9px]">/ 600m × 600m SURFACE DATUM</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {hoverCoord && (
-            <div className="flex items-center gap-2 font-mono text-[10px] text-[#58A6FF] bg-[#080A0D] px-1.5 py-0.5 rounded-[2px] border border-[#21262D] tabular-nums">
-              <span>X: {hoverCoord.x}m</span>
-              <span>Y: {hoverCoord.y}m</span>
-            </div>
-          )}
-          <span className="text-[10px] font-mono text-[#8B949E] tabular-nums">
-            ZOOM: {(zoom * 100).toFixed(0)}%
-          </span>
-        </div>
-      </div>
-
+    <div className="relative w-full h-full flex flex-col bg-[#09090B] overflow-hidden select-none">
       {/* Main Canvas Container */}
       <div
         ref={containerRef}
-        className={`relative flex-1 w-full min-h-0 bg-[#080A0D] ${
+        className={`relative flex-1 w-full min-h-0 bg-[#09090B] ${
           isHazardModeActive ? 'cursor-crosshair' : 'cursor-default'
         }`}
       >
@@ -1262,321 +1242,182 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
           className="w-full h-full block"
         />
 
-        {/* 1. FLOATING TACTICAL HERO HUD (Top-Left) */}
-        <div className="absolute top-2 left-2 z-20 flex items-center gap-3 px-3 py-1.5 bg-[#0F1217]/85 backdrop-blur-md border border-[#21262D] rounded-[2px] shadow-panel font-mono text-xs">
-          {/* KPI 1: LOCALIZATION ERROR */}
-          <div className="flex flex-col">
-            <span className="text-[9px] uppercase tracking-wider text-[#8B949E] font-medium">LOCALIZATION ERROR</span>
-            <div className="flex items-baseline gap-1 mt-0.5">
-              <span className={`text-sm font-bold tabular-nums ${posErrorColor}`}>{posError.toFixed(2)}</span>
-              <span className="text-[10px] text-[#8B949E]">m</span>
-            </div>
-          </div>
-
-          <div className="w-[1px] h-6 bg-[#21262D]" />
-
-          {/* KPI 2: EKF 2σ UNCERTAINTY */}
-          <div className="flex flex-col">
-            <span className="text-[9px] uppercase tracking-wider text-[#8B949E] font-medium">EKF 2σ RADIUS</span>
-            <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-sm font-bold text-[#58A6FF] tabular-nums">
-                ±{(state?.ekf?.uncertainty_m ?? 0.5).toFixed(2)}
+        {/* Slim Minimal Translucent Top-Left Readout */}
+        <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-2.5 px-3 py-1.5 bg-[#0C0C0E]/80 backdrop-blur-md border border-[#222226] rounded-md font-mono text-[11px] text-[#A1A1AA]">
+          <span>
+            Err <span className="text-[#F4F4F5] font-medium tabular-nums">{posError.toFixed(2)}m</span>
+          </span>
+          <span className="text-[#222226]">·</span>
+          <span>
+            2σ <span className="text-[#F4F4F5] font-medium tabular-nums">±{(state?.ekf?.uncertainty_m ?? 0.5).toFixed(2)}m</span>
+          </span>
+          <span className="text-[#222226]">·</span>
+          <span className="flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full ${isBlackout ? 'bg-red-500' : 'bg-emerald-500'}`} />
+            <span className="text-[#F4F4F5] font-medium tabular-nums">
+              {isBlackout ? 'Blackout' : `${visibleSats}/4 Lock`}
+            </span>
+          </span>
+          {state?.dust_storm?.rover_in_storm && (
+            <>
+              <span className="text-[#222226]">·</span>
+              <span className="flex items-center gap-1.5 text-[#F4F4F5]">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>VO Degraded</span>
               </span>
-              <span className="text-[10px] text-[#8B949E]">m</span>
-            </div>
-          </div>
-
-          <div className="w-[1px] h-6 bg-[#21262D]" />
-
-          {/* KPI 3: SATELLITE LOCK */}
-          <div className="flex flex-col">
-            <span className="text-[9px] uppercase tracking-wider text-[#8B949E] font-medium">CONSTELLATION</span>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isBlackout ? 'bg-[#F85149] animate-pulse' : 'bg-[#2EA043] animate-pulse'
-                }`}
-              />
-              <span
-                className={`text-xs font-bold tabular-nums ${
-                  isBlackout ? 'text-[#F85149]' : 'text-[#2EA043]'
-                }`}
-              >
-                {isBlackout ? 'BLACKOUT' : `${visibleSats}/4 LOCK`}
+            </>
+          )}
+          {state?.shadow_race_enabled && state?.shadow_rover && (
+            <>
+              <span className="text-[#222226]">·</span>
+              <span className="text-[#A1A1AA]">
+                Shadow <span className="text-[#F4F4F5] tabular-nums">{(state.shadow_rover?.localization_error ?? 0).toFixed(1)}m</span>
               </span>
-            </div>
-          </div>
+            </>
+          )}
+          {hoverCoord && (
+            <>
+              <span className="text-[#222226]">·</span>
+              <span className="text-[#71717A] tabular-nums">
+                {hoverCoord.x}, {hoverCoord.y}m
+              </span>
+            </>
+          )}
         </div>
 
-        {/* Dust Storm In-Field Warning Pill */}
-        {state?.dust_storm?.rover_in_storm && (
-          <div className="absolute top-14 left-2 z-20 flex items-center gap-2 px-2.5 py-1 bg-[#D29922]/20 border border-[#D29922] rounded-[2px] shadow-panel font-mono text-xs text-[#D29922] animate-pulse">
-            <span className="w-2 h-2 rounded-full bg-[#D29922] animate-ping" />
-            <span className="font-bold">DUST STORM — VO DEGRADED</span>
-          </div>
-        )}
-
-        {/* 2. LIVE AI ACTIVITY TICKER (Top-Center) */}
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none max-w-[540px] w-full px-2">
-          <div className="w-full bg-[#0F1217]/90 backdrop-blur-md border border-[#21262D] rounded-full px-3 py-1 flex items-center justify-center gap-2 text-xs font-mono shadow-panel truncate">
-            <span className="w-2 h-2 rounded-full bg-[#58A6FF] shrink-0 animate-pulse" />
-            <span className="text-[#E6EDF3] text-[11px] truncate tracking-tight">{tickerText}</span>
-          </div>
-        </div>
-
-        {/* 2b. LIVE SHADOW RACE COMPARISON STRIP (Mode A vs Mode C) */}
-        {state?.shadow_race_enabled && state?.shadow_rover && (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20 flex flex-wrap items-center justify-center gap-3 px-3 py-1 bg-[#0F1217]/95 backdrop-blur-md border border-[#F85149]/60 rounded-[2px] shadow-panel font-mono text-xs select-none">
-            {/* Mode C NAVIS */}
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-[1px] bg-[#58A6FF]" />
-              <span className="text-[#58A6FF] font-bold text-[11px]">NAVIS (MODE C):</span>
-              <span className="text-[#E6EDF3] font-semibold tabular-nums">{posError.toFixed(2)}m Err</span>
-              <span className="text-[#2EA043] text-[10px]">
-                ({(state.terrain_summary?.injected_hazards?.length ?? 0) + (state.hazard_alert?.detected_count ?? 0)} Avoided)
-              </span>
-            </div>
-
-            <div className="w-[1px] h-4 bg-[#21262D] hidden sm:block" />
-
-            {/* Mode A Shadow */}
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-[1px] bg-[#F85149]" />
-              <span className="text-[#F85149] font-bold text-[11px]">SHADOW (MODE A):</span>
-              <span className="text-[#F85149] font-semibold tabular-nums">{(state.shadow_rover?.localization_error ?? 0).toFixed(2)}m Err</span>
-              <span className="text-[#F85149] text-[10px]">({state.shadow_rover?.hazard_collisions ?? 0} Collisions)</span>
-            </div>
-
-            <div className="w-[1px] h-4 bg-[#21262D] hidden sm:block" />
-
-            {/* Live Drift Advantage */}
-            <div className="flex items-center gap-1 text-[11px] font-bold">
-              <span className="text-[#8B949E]">DRIFT ADVANTAGE:</span>
-              <span className="text-[#2EA043] tabular-nums">
-                {(state.shadow_rover?.localization_error ?? 0) > posError
-                  ? `NAVIS ${Math.min(
-                      99,
-                      Math.round(
-                        (((state.shadow_rover?.localization_error ?? 0) - posError) /
-                          Math.max(0.01, state.shadow_rover?.localization_error ?? 1)) *
-                          100
-                      )
-                    )}% MORE ACCURATE`
-                  : 'SYNCHRONIZED (T+0)'}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* 2c. LIVE MULTI-ROVER SWARM STATUS STRIP */}
-        {state?.swarm_mode_enabled && state?.swarm_rovers && state.swarm_rovers.length > 0 && (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20 flex flex-wrap items-center justify-center gap-3 px-3 py-1 bg-[#0F1217]/95 backdrop-blur-md border border-[#58A6FF]/60 rounded-[2px] shadow-panel font-mono text-xs select-none">
-            {state.swarm_rovers.map((sr, idx) => (
-              <React.Fragment key={sr.rover_id}>
-                {idx > 0 && <div className="w-[1px] h-4 bg-[#21262D] hidden sm:block" />}
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-[1px]" style={{ backgroundColor: sr.color }} />
-                  <span className="font-bold text-[11px]" style={{ color: sr.color }}>
-                    {sr.callsign.toUpperCase()} ({sr.role}):
-                  </span>
-                  <span className="text-[#E6EDF3] font-semibold tabular-nums">
-                    {sr.localization_error.toFixed(1)}m Err
-                  </span>
-                  <span className={`text-[10px] px-1 py-0.2 rounded-[1px] border font-bold ${
-                    sr.assigned_satellite_id
-                      ? 'border-[#2EA043]/40 text-[#2EA043] bg-[#2EA043]/10'
-                      : 'border-[#F85149]/40 text-[#F85149] bg-[#F85149]/10'
-                  }`}>
-                    {sr.assigned_satellite_id ? `LOCKED: ${sr.assigned_satellite_id}` : 'DR NO-PNT'}
-                  </span>
-                </div>
-              </React.Fragment>
-            ))}
-          </div>
-        )}
-
-        {/* 3. TACTICAL CONTROLS & LAYERS POPOVER (Top-Right) */}
-        <div className="absolute top-2 right-2 z-20 flex items-center gap-1">
-          {/* Layers Popover Button */}
+        {/* Top-Right Layers & Zoom Controls */}
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5">
           <button
             onClick={() => setIsLayersOpen((o) => !o)}
-            className={`btn-control text-[10px] transition-colors duration-150 ${
-              isLayersOpen ? 'bg-[#21262D] text-[#58A6FF] border-[#58A6FF]/50' : 'text-[#8B949E]'
+            className={`btn-control bg-[#0C0C0E]/80 backdrop-blur-md text-xs ${
+              isLayersOpen ? 'bg-[#1C1C21] text-[#F4F4F5] border-[#3F3F46]' : ''
             }`}
-            title="Toggle Map Layers & Inspect Tactical Legend"
+            title="Toggle Map Layers"
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>LAYERS & LEGEND</span>
-            {isLayersOpen ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
+            <span>Layers</span>
+            {isLayersOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
 
-          {/* Canvas View Transform Controls */}
-          <div className="flex items-center gap-0.5 p-0.5 rounded-[2px] bg-[#0F1217]/90 border border-[#21262D]">
+          <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-[#0C0C0E]/80 backdrop-blur-md border border-[#222226]">
             <button
               onClick={() => setZoom((z) => Math.min(4.0, z * 1.2))}
-              className="p-1 rounded-[2px] hover:bg-[#21262D] text-[#8B949E] hover:text-[#E6EDF3] transition-colors duration-150"
+              className="p-1.5 rounded-[4px] hover:bg-[#141417] text-[#A1A1AA] hover:text-[#F4F4F5] transition-colors"
               title="Zoom In"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setZoom((z) => Math.max(0.6, z * 0.8))}
-              className="p-1 rounded-[2px] hover:bg-[#21262D] text-[#8B949E] hover:text-[#E6EDF3] transition-colors duration-150"
+              className="p-1.5 rounded-[4px] hover:bg-[#141417] text-[#A1A1AA] hover:text-[#F4F4F5] transition-colors"
               title="Zoom Out"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={resetView}
-              className="p-1 rounded-[2px] hover:bg-[#21262D] text-[#8B949E] hover:text-[#E6EDF3] transition-colors duration-150"
+              className="p-1.5 rounded-[4px] hover:bg-[#141417] text-[#A1A1AA] hover:text-[#F4F4F5] transition-colors"
               title="Reset View"
             >
               <Maximize2 className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setFollowRover((f) => !f)}
-              className={`p-1 rounded-[2px] transition-colors duration-150 ${
+              className={`p-1.5 rounded-[4px] transition-colors ${
                 followRover
-                  ? 'bg-[#58A6FF] text-[#080A0D]'
-                  : 'hover:bg-[#21262D] text-[#8B949E] hover:text-[#E6EDF3]'
+                  ? 'bg-[#F4F4F5] text-[#09090B]'
+                  : 'hover:bg-[#141417] text-[#A1A1AA] hover:text-[#F4F4F5]'
               }`}
-              title="Toggle Follow Rover Tracking"
+              title="Follow Rover"
             >
               <Navigation className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Collapsible Layers & Legend Popover */}
+        {/* Layers Popover */}
         {isLayersOpen && (
-          <div className="absolute top-10 right-2 z-30 w-64 bg-[#0F1217]/95 backdrop-blur-md border border-[#21262D] rounded-[2px] p-2.5 font-mono text-[11px] shadow-panel space-y-2">
-            <div className="flex items-center justify-between border-b border-[#21262D] pb-1.5 text-[10px] text-[#8B949E] uppercase tracking-wider font-semibold">
-              <span>MAP LAYERS & VISIBILITY</span>
+          <div className="absolute top-12 right-3 z-30 w-60 bg-[#0C0C0E] border border-[#222226] rounded-md p-3 text-xs shadow-2xl space-y-2.5">
+            <div className="flex items-center justify-between border-b border-[#1E1E22] pb-2 text-[11px] text-[#71717A] uppercase tracking-wider font-medium">
+              <span>Layers</span>
               <button
                 onClick={() => setIsLayersOpen(false)}
-                className="text-[#8B949E] hover:text-[#E6EDF3]"
+                className="text-[#71717A] hover:text-[#F4F4F5]"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            {/* Toggle Switches */}
-            <div className="space-y-1.5 text-[#E6EDF3]">
-              <label className="flex items-center justify-between cursor-pointer hover:bg-[#161B22] p-1 rounded-[2px]">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-[1px] bg-[#381E15]" />
-                  Elevation Contours
-                </span>
+            <div className="space-y-1.5 text-[#F4F4F5]">
+              <label className="flex items-center justify-between cursor-pointer hover:bg-[#141417] px-1.5 py-1 rounded-[4px]">
+                <span>Elevation Contours</span>
                 <input
                   type="checkbox"
                   checked={layerContours}
                   onChange={(e) => setLayerContours(e.target.checked)}
-                  className="accent-[#58A6FF] cursor-pointer"
+                  className="accent-[#F4F4F5] cursor-pointer"
                 />
               </label>
 
-              <label className="flex items-center justify-between cursor-pointer hover:bg-[#161B22] p-1 rounded-[2px]">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full border border-dashed border-[#58A6FF]" />
-                  EKF 2σ Covariance Ellipse
-                </span>
+              <label className="flex items-center justify-between cursor-pointer hover:bg-[#141417] px-1.5 py-1 rounded-[4px]">
+                <span>EKF 2σ Ellipse</span>
                 <input
                   type="checkbox"
                   checked={layerEKF}
                   onChange={(e) => setLayerEKF(e.target.checked)}
-                  className="accent-[#58A6FF] cursor-pointer"
+                  className="accent-[#F4F4F5] cursor-pointer"
                 />
               </label>
 
-              <label className="flex items-center justify-between cursor-pointer hover:bg-[#161B22] p-1 rounded-[2px]">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-0.5 bg-[#D29922]" />
-                  ML Predicted Trajectory
-                </span>
+              <label className="flex items-center justify-between cursor-pointer hover:bg-[#141417] px-1.5 py-1 rounded-[4px]">
+                <span>ML Trajectory</span>
                 <input
                   type="checkbox"
                   checked={layerPrediction}
                   onChange={(e) => setLayerPrediction(e.target.checked)}
-                  className="accent-[#58A6FF] cursor-pointer"
+                  className="accent-[#F4F4F5] cursor-pointer"
                 />
               </label>
 
-              <label className="flex items-center justify-between cursor-pointer hover:bg-[#161B22] p-1 rounded-[2px]">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full border border-dotted border-[#BC8CFF]" />
-                  Satellite FOV Cones & Beams
-                </span>
+              <label className="flex items-center justify-between cursor-pointer hover:bg-[#141417] px-1.5 py-1 rounded-[4px]">
+                <span>Satellite FOV Cones</span>
                 <input
                   type="checkbox"
                   checked={layerSatellites}
                   onChange={(e) => setLayerSatellites(e.target.checked)}
-                  className="accent-[#58A6FF] cursor-pointer"
+                  className="accent-[#F4F4F5] cursor-pointer"
                 />
               </label>
             </div>
 
-            {/* Tactical Legend Swatches */}
-            <div className="border-t border-[#21262D] pt-2 space-y-1 text-[10px] text-[#8B949E]">
+            <div className="border-t border-[#1E1E22] pt-2 space-y-1 text-[11px] text-[#71717A]">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-0.5 bg-[#58A6FF] inline-block" />
-                <span className="text-[#E6EDF3]">Planned Safe Route</span>
+                <span>Planned Route</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-0.5 bg-[#D29922] inline-block" />
-                <span className="text-[#E6EDF3]">ML Trajectory (+30s)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-0.5 border-b border-dashed border-[#F85149] inline-block" />
-                <span>Avoided Path (Hazard)</span>
+                <span>ML Trajectory (+30s)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-[#2EA043] inline-block" />
-                <span className="text-[#E6EDF3]">Science Target</span>
+                <span>Science Target</span>
               </div>
-              {state?.shadow_race_enabled && (
-                <div className="flex items-center gap-2 pt-1 border-t border-[#21262D]">
-                  <span className="w-3 h-0.5 border-b border-dashed border-[#F85149] inline-block" />
-                  <span className="text-[#F85149] font-bold">Shadow Rover (Mode A DR)</span>
-                </div>
-              )}
-              {state?.dust_storm?.active && (
-                <div className="flex items-center gap-2 pt-1 border-t border-[#21262D]">
-                  <span className="w-3 h-2 rounded-full border border-dashed border-[#F59E0B] bg-[#D97706]/20 inline-block" />
-                  <span className="text-[#F59E0B] font-semibold">Dust Storm Zone (VO Occlusion)</span>
-                </div>
-              )}
-              {state?.swarm_mode_enabled && (
-                <div className="pt-1.5 border-t border-[#21262D] space-y-1">
-                  <div className="text-[9px] uppercase tracking-wider text-[#8B949E] font-semibold">Swarm Units:</div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2 rounded-[1px] bg-[#58A6FF] inline-block" />
-                    <span className="text-[#58A6FF] font-semibold">ROVER-1 (Alpha / Scout) [1.25x]</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2 rounded-[1px] bg-[#2EA043] inline-block" />
-                    <span className="text-[#2EA043] font-semibold">ROVER-2 (Beta / Sampler) [1.0x]</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2 rounded-[1px] bg-[#BC8CFF] inline-block" />
-                    <span className="text-[#BC8CFF] font-semibold">ROVER-3 (Gamma / Hauler) [0.85x]</span>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {/* 4. ACTIVE HAZARD PLACEMENT BANNER */}
+        {/* Active Hazard Placement Notice */}
         {isHazardModeActive && (
-          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-[2px] bg-[#D29922] text-[#080A0D] font-mono text-xs font-bold flex items-center gap-2 shadow-panel animate-pulse">
-            <AlertOctagon className="w-4 h-4 shrink-0" />
-            <span>HAZARD MODE ACTIVE — Click anywhere on the Mars map to place a dynamic obstacle</span>
+          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-md bg-[#0C0C0E] border border-[#3F3F46] text-[#F4F4F5] text-xs font-medium flex items-center gap-2.5 shadow-xl">
+            <AlertOctagon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span>Click anywhere on the map to place a hazard</span>
             {onCancelHazardMode && (
               <button
                 onClick={onCancelHazardMode}
-                className="ml-2 px-1.5 py-0.5 rounded-[2px] bg-[#080A0D] text-[#E6EDF3] text-[10px] hover:bg-[#161B22]"
+                className="ml-1 px-2 py-0.5 rounded-[4px] bg-[#141417] border border-[#222226] text-[11px] text-[#A1A1AA] hover:text-[#F4F4F5]"
               >
-                CANCEL
+                Cancel
               </button>
             )}
           </div>

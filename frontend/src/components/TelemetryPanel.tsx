@@ -1,5 +1,4 @@
 import React from 'react';
-import { Activity, Battery, Gauge, Compass, MapPin, Radio, ShieldCheck, Zap } from 'lucide-react';
 import { RoverState, PerformanceMetricsState } from '../types/simulation';
 
 interface TelemetryPanelProps {
@@ -15,110 +14,84 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({ rover, metrics }
   const totalDist = rover?.total_distance || 0;
   const wheelSlip = rover?.wheel_slip ? (rover.wheel_slip * 100).toFixed(1) : '2.0';
 
-  const getBatteryColor = (pct: number) => {
-    if (pct > 50) return 'text-[#2EA043]';
-    if (pct > 20) return 'text-[#D29922]';
-    return 'text-[#F85149]';
-  };
-
   return (
-    <div className="panel-matte flex flex-col overflow-hidden">
-      {/* Panel Header */}
-      <div className="panel-header">
-        <div className="flex items-center gap-1.5">
-          <Activity className="w-3.5 h-3.5 text-[#58A6FF]" />
-          <span>ROVER TELEMETRY / DYNAMICS</span>
+    <div className="flex flex-col">
+      <div className="px-4 py-2.5 flex items-center justify-between border-b border-[#1E1E22]">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-[#A1A1AA]">
+          Rover Dynamics
+        </span>
+        <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <span>Nominal</span>
         </div>
-        <span className="text-[9px] text-[#2EA043]">NOMINAL</span>
       </div>
 
-      <div className="p-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono">
-        {/* Position */}
-        <div className="telemetry-cell">
-          <div className="text-[9px] uppercase tracking-wider text-[#8B949E] flex items-center gap-1">
-            <MapPin className="w-2.5 h-2.5 text-[#58A6FF]" /> POS (X, Y)
-          </div>
-          <div className="text-sm font-semibold text-[#E6EDF3] num-readout mt-0.5">
+      <div className="px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
+        <div>
+          <div className="text-[11px] text-[#71717A]">Position (X, Y)</div>
+          <div className="text-sm font-medium text-[#F4F4F5] num-readout mt-0.5">
             {(rover?.x ?? 50.0).toFixed(1)}m, {(rover?.y ?? 50.0).toFixed(1)}m
           </div>
-          <div className="text-[8px] text-[#6E7681]">GRID COORD</div>
         </div>
 
-        {/* Speed */}
-        <div className="telemetry-cell">
-          <div className="text-[9px] uppercase tracking-wider text-[#8B949E] flex items-center gap-1">
-            <Gauge className="w-2.5 h-2.5 text-[#2EA043]" /> VELOCITY
+        <div>
+          <div className="text-[11px] text-[#71717A]">Velocity</div>
+          <div className="text-sm font-medium text-[#F4F4F5] num-readout mt-0.5">
+            {speed.toFixed(2)} <span className="text-[#71717A] text-xs">m/s</span>
           </div>
-          <div className="text-sm font-semibold text-[#E6EDF3] num-readout mt-0.5 flex items-baseline gap-1">
-            <span>{speed.toFixed(2)}</span>
-            <span className="text-[10px] text-[#8B949E]">m/s</span>
-          </div>
-          <div className="text-[8px] text-[#6E7681]">MAX 3.5 m/s</div>
         </div>
 
-        {/* Heading Azimuth */}
-        <div className="telemetry-cell">
-          <div className="text-[9px] uppercase tracking-wider text-[#8B949E] flex items-center gap-1">
-            <Compass className="w-2.5 h-2.5 text-[#D29922]" /> HEADING (YAW)
-          </div>
-          <div className="text-sm font-semibold text-[#E6EDF3] num-readout mt-0.5">
+        <div className="col-span-2 h-px bg-[#1E1E22]" />
+
+        <div>
+          <div className="text-[11px] text-[#71717A]">Heading</div>
+          <div className="text-sm font-medium text-[#F4F4F5] num-readout mt-0.5">
             {headingDeg.toFixed(1)}°
           </div>
-          <div className="text-[8px] text-[#6E7681]">TRUE AZIMUTH</div>
         </div>
 
-        {/* Battery */}
-        <div className="telemetry-cell">
-          <div className="text-[9px] uppercase tracking-wider text-[#8B949E] flex items-center gap-1">
-            <Battery className="w-2.5 h-2.5 text-[#58A6FF]" /> POWER PACK
+        <div>
+          <div className="text-[11px] text-[#71717A]">Power</div>
+          <div className="text-sm font-medium text-[#F4F4F5] num-readout mt-0.5 flex items-center gap-1.5">
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                batteryPct > 50 ? 'bg-emerald-500' : batteryPct > 20 ? 'bg-amber-500' : 'bg-red-500'
+              }`}
+            />
+            <span>{batteryPct.toFixed(1)}%</span>
           </div>
-          <div className={`text-sm font-semibold num-readout mt-0.5 flex items-baseline gap-1 ${getBatteryColor(batteryPct)}`}>
-            <span>{batteryPct.toFixed(1)}</span>
-            <span className="text-[10px] text-[#8B949E]">%</span>
-          </div>
-          <div className="text-[8px] text-[#6E7681]">SOLAR BUS</div>
         </div>
 
-        {/* Traveled Distance */}
-        <div className="telemetry-cell">
-          <div className="text-[9px] uppercase tracking-wider text-[#8B949E]">ODOMETRY DIST</div>
-          <div className="text-sm font-semibold text-[#E6EDF3] num-readout mt-0.5">
+        <div className="col-span-2 h-px bg-[#1E1E22]" />
+
+        <div>
+          <div className="text-[11px] text-[#71717A]">Odometry</div>
+          <div className="text-sm font-medium text-[#F4F4F5] num-readout mt-0.5">
             {totalDist.toFixed(1)} m
           </div>
-          <div className="text-[8px] text-[#6E7681]">TOTAL ROLL</div>
         </div>
 
-        {/* Target Range */}
-        <div className="telemetry-cell">
-          <div className="text-[9px] uppercase tracking-wider text-[#8B949E]">TARGET RANGE</div>
-          <div className="text-sm font-semibold text-[#2EA043] num-readout mt-0.5">
+        <div>
+          <div className="text-[11px] text-[#71717A]">Target Range</div>
+          <div className="text-sm font-medium text-[#F4F4F5] num-readout mt-0.5">
             {distToTarget.toFixed(1)} m
           </div>
-          <div className="text-[8px] text-[#6E7681]">VECTOR TO GO</div>
         </div>
 
-        {/* Constellation Window Coverage */}
-        <div className="telemetry-cell">
-          <div className="text-[9px] uppercase tracking-wider text-[#8B949E] flex items-center gap-1">
-            <Radio className="w-2.5 h-2.5 text-[#58A6FF]" /> PNT COVERAGE
-          </div>
-          <div className="text-sm font-semibold text-[#58A6FF] num-readout mt-0.5">
+        <div className="col-span-2 h-px bg-[#1E1E22]" />
+
+        <div>
+          <div className="text-[11px] text-[#71717A]">PNT Coverage</div>
+          <div className="text-sm font-medium text-[#F4F4F5] num-readout mt-0.5">
             {(metrics?.coverage_pct ?? 100.0).toFixed(1)}%
           </div>
-          <div className="text-[8px] text-[#6E7681]">WINDOW PCT</div>
         </div>
 
-        {/* Wheel Slip Index */}
-        <div className="telemetry-cell">
-          <div className="text-[9px] uppercase tracking-wider text-[#8B949E]">WHEEL SLIP</div>
-          <div
-            className={`text-sm font-semibold num-readout mt-0.5 ${
-              Number(wheelSlip) > 15 ? 'text-[#D29922]' : 'text-[#E6EDF3]'
-            }`}
-          >
+        <div>
+          <div className="text-[11px] text-[#71717A]">Wheel Slip</div>
+          <div className="text-sm font-medium text-[#F4F4F5] num-readout mt-0.5">
             {wheelSlip}%
           </div>
-          <div className="text-[8px] text-[#6E7681]">TERRAIN SLIP</div>
         </div>
       </div>
     </div>

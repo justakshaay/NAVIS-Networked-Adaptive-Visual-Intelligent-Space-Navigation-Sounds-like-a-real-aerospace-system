@@ -154,8 +154,8 @@ export function App() {
   const isDemoActive = Boolean(state?.demo_mission?.is_active);
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#080A0D] text-[#E6EDF3] font-sans antialiased select-none">
-      {/* 1. Slim Aerospace Status Header (44px) */}
+    <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#09090B] text-[#F4F4F5] font-sans antialiased select-none">
+      {/* 1. Minimal Top Bar (48px) */}
       <Header
         state={state}
         connected={connected}
@@ -171,10 +171,10 @@ export function App() {
         onOpenShortcuts={() => setIsShortcutsModalOpen((s) => !s)}
       />
 
-      {/* 2. Main Cockpit Workspace */}
+      {/* 2. Main Workspace */}
       <div className="flex-1 min-h-0 flex flex-row overflow-hidden">
-        {/* Left/Center Tactical Workspace (~68% width) */}
-        <div className="flex-1 min-w-0 flex flex-col relative bg-[#080A0D]">
+        {/* Left/Center Mars Viewport */}
+        <div className="flex-1 min-w-0 flex flex-col relative bg-[#09090B]">
           {/* Demo Scenario Milestone Strip (if active and visible) */}
           {state?.demo_mission && isDemoActive && isDemoGuideVisible && (
             <div className="shrink-0 z-20">
@@ -201,9 +201,9 @@ export function App() {
             ) : (
               <Suspense
                 fallback={
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#080A0D] text-[#58A6FF] font-mono text-xs gap-3">
-                    <div className="w-6 h-6 border-2 border-[#58A6FF] border-t-transparent rounded-full animate-spin" />
-                    <span className="tracking-widest uppercase">INITIALIZING 3D ORBITAL VIEWPORT...</span>
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#09090B] text-[#A1A1AA] font-mono text-xs gap-3">
+                    <div className="w-5 h-5 border-2 border-[#F4F4F5] border-t-transparent rounded-full animate-spin" />
+                    <span className="tracking-widest uppercase">Initializing 3D View</span>
                   </div>
                 }
               >
@@ -211,8 +211,8 @@ export function App() {
               </Suspense>
             )}
 
-            {/* Sleek Minimal Floating Command Dock */}
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-[95%] w-full flex flex-col items-center gap-1.5 pointer-events-none">
+            {/* Minimal Bottom Dock */}
+            <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center pointer-events-none">
               <div className="pointer-events-auto w-full">
                 <ReplayBar
                   isReplaying={isReplaying}
@@ -227,7 +227,7 @@ export function App() {
                   onReturnToLive={returnToLive}
                 />
               </div>
-              <div className="pointer-events-auto">
+              <div className="pointer-events-auto w-full">
                 <MissionControls
                   state={state}
                   onStart={startMission}
@@ -249,16 +249,16 @@ export function App() {
           </div>
         </div>
 
-        {/* Right Inspector (~32% width, fixed min 380px) */}
-        <aside className="w-[380px] xl:w-[420px] shrink-0 border-l border-[#21262D] bg-[#0F1217] flex flex-col min-h-0 z-10">
+        {/* Right Inspector (Monochrome Flat) */}
+        <aside className="w-[360px] xl:w-[400px] shrink-0 border-l border-[#222226] bg-[#0C0C0E] flex flex-col min-h-0 z-10">
           {/* Tab Selector */}
-          <div className="h-9 border-b border-[#21262D] bg-[#161B22] flex items-center px-1 gap-1 shrink-0 font-mono text-[11px]">
+          <div className="h-10 border-b border-[#222226] bg-[#0C0C0E] flex items-center px-2 gap-1 shrink-0 text-xs">
             <button
               onClick={() => setActiveTab('GNC')}
-              className={`flex-1 h-7 rounded-[2px] font-semibold flex items-center justify-center gap-1.5 transition-colors duration-150 ${
+              className={`flex-1 h-7 rounded-[5px] font-medium flex items-center justify-center gap-1.5 transition-colors ${
                 activeTab === 'GNC'
-                  ? 'bg-[#0F1217] text-[#58A6FF] border border-[#21262D]'
-                  : 'text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#21262D]/40'
+                  ? 'bg-[#1C1C21] text-[#F4F4F5]'
+                  : 'text-[#71717A] hover:text-[#F4F4F5] hover:bg-[#141417]'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -267,31 +267,31 @@ export function App() {
 
             <button
               onClick={() => setActiveTab('ORBITAL')}
-              className={`flex-1 h-7 rounded-[2px] font-semibold flex items-center justify-center gap-1.5 transition-colors duration-150 ${
+              className={`flex-1 h-7 rounded-[5px] font-medium flex items-center justify-center gap-1.5 transition-colors ${
                 activeTab === 'ORBITAL'
-                  ? 'bg-[#0F1217] text-[#58A6FF] border border-[#21262D]'
-                  : 'text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#21262D]/40'
+                  ? 'bg-[#1C1C21] text-[#F4F4F5]'
+                  : 'text-[#71717A] hover:text-[#F4F4F5] hover:bg-[#141417]'
               }`}
             >
               <Satellite className="w-3.5 h-3.5" />
-              <span>ORBITAL</span>
+              <span>Orbital</span>
             </button>
 
             <button
               onClick={() => setActiveTab('AI')}
-              className={`flex-1 h-7 rounded-[2px] font-semibold flex items-center justify-center gap-1.5 transition-colors duration-150 ${
+              className={`flex-1 h-7 rounded-[5px] font-medium flex items-center justify-center gap-1.5 transition-colors ${
                 activeTab === 'AI'
-                  ? 'bg-[#0F1217] text-[#58A6FF] border border-[#21262D]'
-                  : 'text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#21262D]/40'
+                  ? 'bg-[#1C1C21] text-[#F4F4F5]'
+                  : 'text-[#71717A] hover:text-[#F4F4F5] hover:bg-[#141417]'
               }`}
             >
               <Terminal className="w-3.5 h-3.5" />
-              <span>AI & CHARTS</span>
+              <span>AI & Charts</span>
             </button>
           </div>
 
           {/* Tab Content Pane */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-[#1E1E22]">
             {activeTab === 'GNC' && (
               <>
                 <TelemetryPanel

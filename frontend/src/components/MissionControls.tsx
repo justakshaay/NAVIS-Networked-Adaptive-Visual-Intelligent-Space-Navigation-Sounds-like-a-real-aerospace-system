@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, Zap, ZapOff, AlertOctagon, FastForward, Cpu, Compass, Swords, Wind, Users } from 'lucide-react';
+import { Play, Pause, RotateCcw, Zap, ZapOff, AlertOctagon, Swords, Wind, Users } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
 
 interface MissionControlsProps {
@@ -43,54 +43,50 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
   const isDustStorm = state?.dust_storm?.active || false;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 p-1.5 bg-[#0F1217]/95 backdrop-blur-md border border-[#21262D] rounded-[2px] shadow-panel font-mono text-xs select-none max-w-full">
-      {/* 1. PLAYBACK GROUP */}
+    <div className="w-full bg-[#0C0C0E] border-t border-[#222226] px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs select-none">
+      {/* Left: Playback & Speed */}
       <div className="flex items-center gap-1.5">
-        <span className="text-[9px] uppercase tracking-wider text-[#8B949E] px-1 font-semibold hidden sm:inline">
-          PLAYBACK:
-        </span>
-
         {!isRunning ? (
           <button
             onClick={onStart}
-            className="btn-control bg-[#2EA043]/15 text-[#2EA043] border-[#2EA043]/60 hover:bg-[#2EA043]/25 font-bold transition-colors duration-150"
-            title="Start / Resume 20Hz Simulation"
+            className="btn-control bg-[#F4F4F5] text-[#09090B] border-[#F4F4F5] hover:bg-white hover:text-[#09090B]"
+            title="Start / Resume (Space)"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>START</span>
+            <span>Start</span>
           </button>
         ) : (
           <button
             onClick={onPause}
-            className="btn-control bg-[#D29922]/15 text-[#D29922] border-[#D29922]/60 hover:bg-[#D29922]/25 font-bold transition-colors duration-150"
-            title="Pause Simulation"
+            className="btn-control bg-[#1C1C21] text-[#F4F4F5] border-[#3F3F46]"
+            title="Pause (Space)"
           >
             <Pause className="w-3.5 h-3.5 fill-current" />
-            <span>PAUSE</span>
+            <span>Pause</span>
           </button>
         )}
 
         <button
           onClick={onReset}
-          className="btn-control hover:text-[#E6EDF3] transition-colors duration-150"
-          title="Reset Simulation State to Origin"
+          className="btn-control"
+          title="Reset Simulation (R)"
         >
-          <RotateCcw className="w-3 h-3" />
-          <span>RESET</span>
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Reset</span>
         </button>
 
-        {/* Speed Multipliers */}
-        <div className="flex items-center bg-[#080A0D] border border-[#21262D] rounded-[2px] p-0.5">
+        {/* Speed Segmented Control */}
+        <div className="flex items-center bg-[#09090B] border border-[#222226] rounded-md p-0.5 ml-1">
           {[1.0, 2.0, 5.0].map((spd) => (
             <button
               key={spd}
               onClick={() => onSpeed(spd)}
-              className={`px-1.5 py-0.5 rounded-[2px] text-[10px] tabular-nums font-semibold transition-colors duration-150 ${
+              className={`px-2 py-0.5 rounded-[4px] font-mono text-[11px] tabular-nums transition-colors ${
                 currentSpeed === spd
-                  ? 'bg-[#58A6FF] text-[#080A0D]'
-                  : 'text-[#8B949E] hover:text-[#E6EDF3]'
+                  ? 'bg-[#F4F4F5] text-[#09090B] font-medium'
+                  : 'text-[#71717A] hover:text-[#F4F4F5]'
               }`}
-              title={`Set Simulation Speed to ${spd}x`}
+              title={`Set speed to ${spd}x`}
             >
               {spd}x
             </button>
@@ -98,158 +94,110 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
         </div>
       </div>
 
-      {/* Hairline Divider */}
-      <div className="w-[1px] h-6 bg-[#21262D] mx-0.5" />
-
-      {/* 2. NAVIGATION ARCHITECTURE GROUP / SHADOW RACE */}
+      {/* Center: Mode & Multi-Agent Toggles */}
       <div className="flex items-center gap-1.5">
-        <span className="text-[9px] uppercase tracking-wider text-[#8B949E] px-1 font-semibold hidden md:inline">
-          NAV MODE:
-        </span>
-
-        {isShadowRace ? (
-          /* Locked Comparison Badge when Shadow Race is Active */
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F85149]/15 border border-[#F85149] text-[#F85149] rounded-[2px] font-bold text-[10px] tracking-wide">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#F85149] animate-pulse" />
-            <span>RACE LOCKED: MODE A vs MODE C</span>
-          </div>
-        ) : isSwarmMode ? (
-          /* Swarm Active Badge */
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#58A6FF]/15 border border-[#58A6FF] text-[#58A6FF] rounded-[2px] font-bold text-[10px] tracking-wide">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#58A6FF] animate-pulse" />
-            <span>SWARM ACTIVE: 3 ROVERS (ALPHA, BETA, GAMMA)</span>
-          </div>
-        ) : (
-          /* Normal Mode A/B/C Switcher */
-          <div className="flex items-center bg-[#080A0D] border border-[#21262D] rounded-[2px] p-0.5 gap-0.5">
-            <button
-              onClick={() => onMode('MODE_A')}
-              className={`px-2 py-0.5 rounded-[2px] text-[10px] font-semibold transition-colors duration-150 ${
-                currentMode === 'MODE_A'
-                  ? 'bg-[#21262D] text-[#D29922] border border-[#D29922]/40'
-                  : 'text-[#8B949E] hover:text-[#E6EDF3]'
-              }`}
-              title="Mode A: Pure onboard dead reckoning without satellites (IMU + VO + Wheel Odometry). Demonstrates unbounded drift."
-            >
-              MODE A: DEAD RECKON
-            </button>
-
-            <button
-              onClick={() => onMode('MODE_B')}
-              className={`px-2 py-0.5 rounded-[2px] text-[10px] font-semibold transition-colors duration-150 ${
-                currentMode === 'MODE_B'
-                  ? 'bg-[#21262D] text-[#E6EDF3] border border-[#30363D]'
-                  : 'text-[#8B949E] hover:text-[#E6EDF3]'
-              }`}
-              title="Mode B: Single fixed satellite (SAT-01) PNT. Suffers from periodic orbital blindspots and lacks proactive forward hazard reconnaissance."
-            >
-              MODE B: FIXED SAT
-            </button>
-
-            <button
-              onClick={() => onMode('MODE_C')}
-              className={`px-2 py-0.5 rounded-[2px] text-[10px] font-bold transition-colors duration-150 ${
-                currentMode === 'MODE_C'
-                  ? 'bg-[#58A6FF] text-[#080A0D]'
-                  : 'text-[#58A6FF] hover:bg-[#58A6FF]/10'
-              }`}
-              title="Mode C: NAVIS Adaptive AI. Full 4-satellite dynamic scheduling + EKF sensor fusion + ML polynomial trajectory projection + A* replanning."
-            >
-              MODE C: NAVIS AI ★
-            </button>
+        {!isShadowRace && !isSwarmMode && (
+          <div className="flex items-center bg-[#09090B] border border-[#222226] rounded-md p-0.5">
+            {[
+              { id: 'MODE_A' as const, label: 'Mode A' },
+              { id: 'MODE_B' as const, label: 'Mode B' },
+              { id: 'MODE_C' as const, label: 'Mode C' },
+            ].map((m) => (
+              <button
+                key={m.id}
+                onClick={() => onMode(m.id)}
+                className={`px-2.5 py-0.5 rounded-[4px] text-[11px] font-medium transition-colors ${
+                  currentMode === m.id
+                    ? 'bg-[#F4F4F5] text-[#09090B]'
+                    : 'text-[#71717A] hover:text-[#F4F4F5]'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
         )}
 
-        {/* Shadow Race (A vs C) Toggle Button */}
         {onToggleShadowRace && (
           <button
             onClick={onToggleShadowRace}
-            className={`btn-control font-bold transition-colors duration-150 ${
+            className={`btn-control ${
               isShadowRace
-                ? 'bg-[#F85149] text-[#080A0D] border-[#F85149]'
-                : 'bg-[#161B22] text-[#F85149] border-[#F85149]/60 hover:bg-[#F85149]/15'
+                ? 'bg-[#F4F4F5] text-[#09090B] border-[#F4F4F5] hover:bg-white hover:text-[#09090B]'
+                : ''
             }`}
-            title="Launch simultaneous Mode A (Dead Reckon) vs Mode C (NAVIS AI) live race on identical terrain"
+            title="Shadow Race: Mode A vs Mode C (S)"
           >
             <Swords className="w-3.5 h-3.5" />
-            <span>{isShadowRace ? 'EXIT RACE' : 'SHADOW RACE (A vs C)'}</span>
+            <span>Shadow Race</span>
           </button>
         )}
 
-        {/* Swarm Mode (3 Rovers) Toggle Button */}
         {onToggleSwarmMode && (
           <button
             onClick={onToggleSwarmMode}
-            className={`btn-control font-bold transition-colors duration-150 ${
+            className={`btn-control ${
               isSwarmMode
-                ? 'bg-[#58A6FF] text-[#080A0D] border-[#58A6FF]'
-                : 'bg-[#161B22] text-[#58A6FF] border-[#58A6FF]/60 hover:bg-[#58A6FF]/15'
+                ? 'bg-[#F4F4F5] text-[#09090B] border-[#F4F4F5] hover:bg-white hover:text-[#09090B]'
+                : ''
             }`}
-            title="Deploy 3-rover swarm (Alpha, Beta, Gamma) competing for dynamic 4-satellite orbital contention"
+            title="3-Rover Swarm Mode (M)"
           >
             <Users className="w-3.5 h-3.5" />
-            <span>{isSwarmMode ? 'EXIT SWARM' : 'SWARM (3 ROVERS)'}</span>
+            <span>Swarm</span>
           </button>
         )}
       </div>
 
-      {/* Hairline Divider */}
-      <div className="w-[1px] h-6 bg-[#21262D] mx-0.5" />
-
-      {/* 3. FAULT INJECTION GROUP */}
+      {/* Right: Fault Injectors */}
       <div className="flex items-center gap-1.5">
-        <span className="text-[9px] uppercase tracking-wider text-[#8B949E] px-1 font-semibold hidden xl:inline">
-          FAULTS:
-        </span>
-
-        {/* Hazard Crosshair Trigger */}
         <button
           onClick={onToggleHazardMode}
-          className={`btn-control transition-colors duration-150 ${
+          className={`btn-control ${
             isHazardModeActive
-              ? 'bg-[#D29922] text-[#080A0D] border-[#D29922] font-bold'
-              : 'text-[#D29922] border-[#D29922]/50 hover:bg-[#D29922]/15'
+              ? 'bg-[#F4F4F5] text-[#09090B] border-[#F4F4F5] hover:bg-white hover:text-[#09090B]'
+              : ''
           }`}
-          title="Toggle interactive map hazard placement mode to test dynamic A* obstacle avoidance"
+          title="Click map to inject hazard"
         >
           <AlertOctagon className="w-3.5 h-3.5" />
-          <span>{isHazardModeActive ? 'CROSSHAIR ACTIVE' : 'INJECT HAZARD'}</span>
+          <span>{isHazardModeActive ? 'Click Map' : 'Hazard'}</span>
         </button>
 
-        {/* Dust Storm Fault Trigger */}
         {onToggleDustStorm && (
           <button
             onClick={onToggleDustStorm}
-            className={`btn-control transition-colors duration-150 ${
+            className={`btn-control ${
               isDustStorm
-                ? 'bg-[#D29922] text-[#080A0D] border-[#D29922] font-bold animate-pulse'
-                : 'text-[#D29922] border-[#D29922]/50 hover:bg-[#D29922]/15'
+                ? 'bg-[#1C1C21] text-[#F4F4F5] border-[#3F3F46]'
+                : ''
             }`}
-            title="Inject dynamic moving Martian dust storm fault across the terrain (degrades Visual Odometry)"
+            title="Toggle Dust Storm (D)"
           >
+            {isDustStorm && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />}
             <Wind className="w-3.5 h-3.5" />
-            <span>{isDustStorm ? 'STORM ACTIVE' : 'DUST STORM'}</span>
+            <span>Dust Storm</span>
           </button>
         )}
 
-        {/* Satellite Outage / Restore */}
         {!isOutage ? (
           <button
             onClick={onOutage}
-            className="btn-control text-[#F85149] border-[#F85149]/50 hover:bg-[#F85149]/15 transition-colors duration-150"
-            title="Trigger total constellation communication & PNT blackout to test autonomous fallback"
+            className="btn-control"
+            title="Trigger Satellite Outage (O)"
           >
             <ZapOff className="w-3.5 h-3.5" />
-            <span>SAT OUTAGE</span>
+            <span>Sat Outage</span>
           </button>
         ) : (
           <button
             onClick={onRestore}
-            className="btn-control bg-[#2EA043]/20 text-[#2EA043] border-[#2EA043] font-bold animate-pulse hover:bg-[#2EA043]/30 transition-colors duration-150"
-            title="Restore Satellite Constellation PNT Link"
+            className="btn-control bg-[#1C1C21] text-[#F4F4F5] border-[#3F3F46]"
+            title="Restore Satellite Link (O)"
           >
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
             <Zap className="w-3.5 h-3.5" />
-            <span>RESTORE PNT</span>
+            <span>Restore Sat</span>
           </button>
         )}
       </div>

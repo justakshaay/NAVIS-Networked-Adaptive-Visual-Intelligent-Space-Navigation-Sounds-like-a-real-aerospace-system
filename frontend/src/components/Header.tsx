@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Radio, ShieldCheck, Activity, Compass, Cpu, AlertTriangle, PlayCircle, Bot, Swords, FileText, ChevronDown, Download, Printer, HelpCircle } from 'lucide-react';
+import { FileText, ChevronDown, Download, Printer, HelpCircle } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
 
 interface HeaderProps {
@@ -31,7 +31,6 @@ export const Header: React.FC<HeaderProps> = ({
   onExportCsv,
   onOpenShortcuts,
 }) => {
-  const [utcTime, setUtcTime] = useState<string>('');
   const [isExportMenuOpen, setIsExportMenuOpen] = useState<boolean>(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
@@ -45,253 +44,178 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setUtcTime(now.toUTCString().slice(17, 25) + ' UTC');
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   const metMinutes = state ? Math.floor(state.sim_time / 60) : 0;
   const metSeconds = state ? Math.floor(state.sim_time % 60) : 0;
   const metString = `MET +${String(metMinutes).padStart(2, '0')}:${String(metSeconds).padStart(2, '0')}`;
 
-  const currentMode = state?.active_mode || 'MODE_C';
+  const isFallback = Boolean(state?.ekf?.fallback_active);
+  const statusLabel = isFallback
+    ? 'Fallback'
+    : state?.rover?.mission_status === 'TARGET_REACHED'
+    ? 'Arrived'
+    : state?.is_running
+    ? 'Navigating'
+    : 'Standby';
 
   return (
-    <header className="h-[44px] w-full bg-[#0F1217] border-b border-[#21262D] px-3 flex items-center justify-between gap-3 select-none shrink-0 z-30 font-mono">
-      {/* Brand & Subsystem Ident */}
-      <div className="flex items-center gap-2.5">
-        <div className="flex items-center justify-center w-7 h-7 bg-[#161B22] border border-[#58A6FF]/40 rounded-[2px]">
-          <span className="font-mono font-bold text-xs text-[#58A6FF]">NV</span>
-        </div>
+    <header className="h-12 w-full bg-[#0C0C0E] border-b border-[#222226] px-4 flex items-center justify-between gap-4 select-none shrink-0 z-30">
+      {/* Left: NAVIS Wordmark + Map & View Segmented Toggles */}
+      <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-sm font-bold tracking-wider text-[#E6EDF3]">
+          <span className="font-mono text-sm font-semibold tracking-wider text-[#F4F4F5]">
             NAVIS
           </span>
-          <span className="text-[10px] text-[#8B949E] border border-[#21262D] bg-[#161B22] px-1.5 py-0.5 rounded-[2px]">
-            GNC-SYS v2.4
-          </span>
-          <span className="hidden lg:inline-block text-[11px] text-[#8B949E] tracking-tight">
-            / MARS AUTONOMOUS FLIGHT CONTROL
-          </span>
-        </div>
-      </div>
-
-      {/* Center Status Indicators */}
-      <div className="flex items-center gap-2">
-        {/* Active Mode Pill */}
-        <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px] text-[11px]">
-          <span className="text-[10px] text-[#8B949E]">ARCH:</span>
           <span
-            className={`font-bold ${
-              currentMode === 'MODE_C'
-                ? 'text-[#58A6FF]'
-                : currentMode === 'MODE_B'
-                ? 'text-[#E6EDF3]'
-                : 'text-[#D29922]'
-            }`}
-          >
-            {state?.mode_meta?.tag || (currentMode === 'MODE_C' ? 'ADAPTIVE AI' : currentMode)}
-          </span>
+            className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-zinc-600'}`}
+            title={connected ? 'Telemetry connected' : 'Connecting...'}
+          />
         </div>
 
-        {/* Terrain Preset Selector Pill */}
-        <div className="hidden sm:flex items-center bg-[#161B22] border border-[#21262D] rounded-[2px] p-0.5 text-[10px]">
-          <span className="text-[9px] uppercase tracking-wider text-[#8B949E] px-1 font-semibold">
-            MAP:
-          </span>
+        <div className="h-4 w-px bg-[#222226]" />
+
+        {/* Map Preset Segmented Toggle */}
+        <div className="hidden sm:flex items-center bg-[#09090B] border border-[#222226] rounded-md p-0.5 text-xs">
           <button
             onClick={() => onSetTerrainPreset?.('procedural')}
-            className={`px-1.5 py-0.5 rounded-[1px] transition-colors duration-150 ${
+            className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
               (state?.terrain_preset || 'procedural') === 'procedural'
-                ? 'bg-[#21262D] text-[#E6EDF3] font-bold'
-                : 'text-[#8B949E] hover:text-[#E6EDF3]'
+                ? 'bg-[#F4F4F5] text-[#09090B]'
+                : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
             }`}
-            title="Switch to Procedural Martian Plains with randomized craters and rock fields"
+            title="Procedural Martian Plains"
           >
-            PROCEDURAL
+            Procedural
           </button>
           <button
             onClick={() => onSetTerrainPreset?.('jezero_crater')}
-            className={`px-1.5 py-0.5 rounded-[1px] transition-colors duration-150 ${
+            className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
               state?.terrain_preset === 'jezero_crater'
-                ? 'bg-[#58A6FF]/20 text-[#58A6FF] font-bold border border-[#58A6FF]/40'
-                : 'text-[#8B949E] hover:text-[#E6EDF3]'
+                ? 'bg-[#F4F4F5] text-[#09090B]'
+                : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
             }`}
-            title="Switch to NASA Jezero Crater Western River Delta & Ancient Lakebed Basin"
+            title="NASA Jezero Crater Western River Delta"
           >
-            JEZERO CRATER
+            Jezero
           </button>
         </div>
 
-        {/* 2D / 3D Viewport Toggle Pill */}
-        <div className="flex items-center bg-[#161B22] border border-[#21262D] rounded-[2px] p-0.5 text-[10px]">
-          <span className="text-[9px] uppercase tracking-wider text-[#8B949E] px-1 font-semibold hidden md:inline">
-            VIEW:
-          </span>
+        {/* 2D / 3D View Segmented Toggle */}
+        <div className="flex items-center bg-[#09090B] border border-[#222226] rounded-md p-0.5 text-xs">
           <button
             onClick={() => onToggleViewMode?.('2D')}
-            className={`px-2 py-0.5 rounded-[1px] font-bold transition-colors duration-150 ${
+            className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
               viewMode === '2D'
-                ? 'bg-[#58A6FF] text-[#080A0D]'
-                : 'text-[#8B949E] hover:text-[#E6EDF3]'
+                ? 'bg-[#F4F4F5] text-[#09090B]'
+                : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
             }`}
-            title="Switch to 2D High-Resolution Tactical Top-Down Canvas"
           >
-            2D TACTICAL
+            2D
           </button>
           <button
             onClick={() => onToggleViewMode?.('3D')}
-            className={`px-2 py-0.5 rounded-[1px] font-bold transition-colors duration-150 ${
+            className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
               viewMode === '3D'
-                ? 'bg-[#58A6FF] text-[#080A0D]'
-                : 'text-[#8B949E] hover:text-[#E6EDF3]'
+                ? 'bg-[#F4F4F5] text-[#09090B]'
+                : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
             }`}
-            title="Switch to Interactive 3D Martian Surface & Orbital Constellation View"
           >
-            3D ORBITAL
+            3D
           </button>
-        </div>
-
-        {/* Autonomous Fallback Warning Flag */}
-        {Boolean(state?.ekf?.fallback_active) && (
-          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#F85149]/15 border border-[#F85149] rounded-[2px] text-[11px] text-[#F85149] animate-pulse">
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span className="font-bold">AUTONOMOUS FALLBACK</span>
-          </div>
-        )}
-
-        {/* Shadow Race Active Badge */}
-        {state?.shadow_race_enabled && (
-          <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-[#F85149]/20 border border-[#F85149] rounded-[2px] text-[11px] text-[#F85149] font-bold">
-            <Swords className="w-3.5 h-3.5" />
-            <span>RACE: MODE A vs C</span>
-          </div>
-        )}
-
-        {/* Rover Physical Status */}
-        <div className="hidden xl:flex items-center gap-1.5 px-2 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px] text-[11px]">
-          <Compass className="w-3.5 h-3.5 text-[#2EA043]" />
-          <span className="text-[#8B949E]">STATUS:</span>
-          <span className="text-[#E6EDF3] font-semibold tabular-nums">
-            {state?.rover?.mission_status || 'INITIALIZING'}
-          </span>
         </div>
       </div>
 
-      {/* Right Action Trigger Buttons & Telemetry Clocks */}
-      <div className="flex items-center gap-2 text-xs">
-        {/* MET Clock */}
-        <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px]">
-          <Activity className="w-3.5 h-3.5 text-[#58A6FF]" />
-          <span className="text-[#8B949E] text-[10px]">MET:</span>
-          <span className="text-[#E6EDF3] font-semibold tabular-nums">{metString}</span>
+      {/* Center: Minimal Inline Status + MET Timer */}
+      <div className="hidden md:flex items-center gap-4 text-xs">
+        <div className="flex items-center gap-2 text-[#A1A1AA]">
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              isFallback
+                ? 'bg-red-500'
+                : state?.is_running
+                ? 'bg-emerald-500'
+                : 'bg-zinc-500'
+            }`}
+          />
+          <span className="text-[#F4F4F5] font-medium">{statusLabel}</span>
+          {state?.shadow_race_enabled && (
+            <span className="text-[#71717A] font-mono">· Race A vs C</span>
+          )}
+          {state?.swarm_mode_enabled && (
+            <span className="text-[#71717A] font-mono">· Swarm (3)</span>
+          )}
         </div>
+        <span className="text-[#222226]">|</span>
+        <span className="font-mono text-[#71717A] tabular-nums">{metString}</span>
+      </div>
 
-        {/* UTC Clock */}
-        <div className="hidden md:block px-2 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px] text-[#8B949E] text-[11px] tabular-nums">
-          {utcTime}
-        </div>
-
-        {/* Prominent Demo Guide Trigger for Judges */}
+      {/* Right: Clean Ghost/Outline Actions */}
+      <div className="flex items-center gap-2">
         {isDemoActive ? (
           <button
             onClick={onToggleDemoGuide}
-            className="btn-control bg-[#58A6FF]/15 border-[#58A6FF] text-[#58A6FF] font-semibold transition-colors duration-150"
-            title="Toggle Demo Mission Stage HUD"
+            className="btn-control bg-[#1C1C21] text-[#F4F4F5] border-[#3F3F46]"
           >
-            <Bot className="w-3.5 h-3.5 animate-pulse" />
-            <span>DEMO HUD</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Demo</span>
           </button>
         ) : onStartDemo ? (
-          <button
-            onClick={onStartDemo}
-            className="btn-control bg-[#161B22] border-[#58A6FF]/60 text-[#58A6FF] hover:bg-[#58A6FF]/15 font-semibold transition-colors duration-150"
-            title="Launch automated 15-stage demonstration mission for judges"
-          >
-            <Bot className="w-3.5 h-3.5" />
-            <span>GUIDED DEMO</span>
+          <button onClick={onStartDemo} className="btn-control">
+            <span>Demo</span>
           </button>
         ) : null}
 
-        {/* Prominent Benchmark Modes Button for Judges */}
-        <button
-          onClick={onOpenBenchmark}
-          className="btn-control bg-[#BC8CFF]/15 border-[#BC8CFF]/70 text-[#BC8CFF] hover:bg-[#BC8CFF]/25 font-semibold transition-colors duration-150"
-          title="Open head-to-head performance benchmark comparing Mode A, B, and C"
-        >
-          <ShieldCheck className="w-3.5 h-3.5 text-[#BC8CFF]" />
-          <span>COMPARE MODES</span>
+        <button onClick={onOpenBenchmark} className="btn-control">
+          <span>Benchmark</span>
         </button>
 
-        {/* Export Report & Telemetry Dropdown */}
+        {/* Export Dropdown */}
         <div className="relative" ref={exportMenuRef}>
           <button
             onClick={() => setIsExportMenuOpen((o) => !o)}
-            className="btn-control bg-[#161B22] border-[#21262D] text-[#E6EDF3] hover:text-[#58A6FF] font-semibold transition-colors duration-150 flex items-center gap-1.5"
-            title="Export mission telemetry CSV or print flight debrief report"
+            className="btn-control"
           >
-            <FileText className="w-3.5 h-3.5 text-[#58A6FF]" />
-            <span>EXPORT REPORT</span>
-            <ChevronDown className="w-3 h-3 text-[#8B949E]" />
+            <span>Export</span>
+            <ChevronDown className="w-3 h-3 text-[#71717A]" />
           </button>
 
           {isExportMenuOpen && (
-            <div className="absolute right-0 top-8 z-50 w-56 bg-[#0F1217] border border-[#21262D] rounded-[2px] shadow-2xl p-1 font-mono text-[11px] space-y-0.5">
+            <div className="absolute right-0 top-9 z-50 w-52 bg-[#0C0C0E] border border-[#222226] rounded-md shadow-2xl p-1 text-xs space-y-0.5">
               <button
                 onClick={() => {
                   setIsExportMenuOpen(false);
                   onOpenDebrief?.();
                 }}
-                className="w-full text-left px-2 py-1.5 rounded-[1px] hover:bg-[#161B22] text-[#E6EDF3] hover:text-[#58A6FF] flex items-center gap-2 transition-colors duration-150"
+                className="w-full text-left px-2.5 py-1.5 rounded-[4px] hover:bg-[#141417] text-[#F4F4F5] flex items-center gap-2 transition-colors"
               >
-                <Printer className="w-3.5 h-3.5 text-[#58A6FF]" />
-                <div>
-                  <div className="font-bold">MISSION DEBRIEF (PDF)</div>
-                  <div className="text-[9px] text-[#8B949E]">Formatted print-ready summary</div>
-                </div>
+                <Printer className="w-3.5 h-3.5 text-[#A1A1AA]" />
+                <span>Mission Debrief Report</span>
               </button>
               <button
                 onClick={() => {
                   setIsExportMenuOpen(false);
                   onExportCsv?.();
                 }}
-                className="w-full text-left px-2 py-1.5 rounded-[1px] hover:bg-[#161B22] text-[#E6EDF3] hover:text-[#2EA043] flex items-center gap-2 transition-colors duration-150 border-t border-[#21262D]/60"
+                className="w-full text-left px-2.5 py-1.5 rounded-[4px] hover:bg-[#141417] text-[#F4F4F5] flex items-center gap-2 transition-colors"
               >
-                <Download className="w-3.5 h-3.5 text-[#2EA043]" />
-                <div>
-                  <div className="font-bold">TELEMETRY (.CSV)</div>
-                  <div className="text-[9px] text-[#8B949E]">Structured flight recorder data</div>
-                </div>
+                <Download className="w-3.5 h-3.5 text-[#A1A1AA]" />
+                <span>Download CSV Log</span>
               </button>
+              <div className="px-2.5 py-1 text-[10px] text-[#71717A] border-t border-[#222226] flex items-center gap-1.5">
+                <FileText className="w-3 h-3" />
+                <span>Includes EKF & events</span>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Presenter Keyboard Shortcuts Button */}
         <button
           onClick={onOpenShortcuts}
-          className="btn-control py-1 px-1.5 bg-[#161B22] border-[#21262D] text-[#8B949E] hover:text-[#58A6FF] rounded-[2px]"
-          title="Presenter Keyboard Shortcuts (?)"
+          className="btn-control px-2"
+          title="Keyboard Shortcuts (?)"
+          aria-label="Keyboard Shortcuts"
         >
           <HelpCircle className="w-3.5 h-3.5" />
         </button>
-
-        {/* Telemetry Stream Heartbeat */}
-        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px] text-[11px]">
-          <span
-            className={`w-2 h-2 rounded-[1px] ${
-              connected ? 'bg-[#2EA043] animate-pulse' : 'bg-[#F85149]'
-            }`}
-          />
-          <span className="text-[#8B949E] text-[10px] tabular-nums">
-            {connected ? 'LINK 20Hz' : 'OFFLINE'}
-          </span>
-        </div>
       </div>
     </header>
   );

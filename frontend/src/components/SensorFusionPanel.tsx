@@ -1,5 +1,4 @@
 import React from 'react';
-import { Layers, ShieldCheck, AlertTriangle, Target, Gauge, Check, X } from 'lucide-react';
 import { EKFState, SensorSuiteState, PerformanceMetricsState } from '../types/simulation';
 
 interface SensorFusionPanelProps {
@@ -21,123 +20,100 @@ export const SensorFusionPanel: React.FC<SensorFusionPanelProps> = ({
   const uncertainty = ekf?.uncertainty_m || 0.5;
 
   return (
-    <div className="panel-matte flex flex-col overflow-hidden">
-      {/* Panel Header */}
-      <div className="panel-header">
-        <div className="flex items-center gap-1.5">
-          <Layers className="w-3.5 h-3.5 text-[#58A6FF]" />
-          <span>SENSOR FUSION & EKF ESTIMATOR</span>
-        </div>
-        <div>
-          {isFallback ? (
-            <span className="text-[#F85149] text-[9px] font-bold flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" /> FALLBACK
-            </span>
-          ) : (
-            <span className="text-[#2EA043] text-[9px] font-bold flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3" /> PNT LOCKED
-            </span>
-          )}
+    <div className="flex flex-col">
+      {/* Header */}
+      <div className="px-4 py-2.5 flex items-center justify-between border-b border-[#1E1E22]">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-[#A1A1AA]">
+          Sensor Fusion & EKF
+        </span>
+        <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${isFallback ? 'bg-red-500' : 'bg-emerald-500'}`}
+          />
+          <span>{isFallback ? 'Fallback' : 'PNT Locked'}</span>
         </div>
       </div>
 
-      <div className="p-2 flex flex-col gap-2 font-mono">
-        {/* Sensor Health Matrix */}
-        <div className="grid grid-cols-4 gap-1">
-          {/* Satellite PNT */}
-          <div
-            className={`px-2 py-1 rounded-[2px] border text-[10px] flex items-center justify-between ${
-              pntActive
-                ? 'bg-[#080A0D] border-[#2EA043]/50 text-[#2EA043]'
-                : 'bg-[#080A0D] border-[#F85149]/50 text-[#F85149]'
-            }`}
-          >
-            <span>PNT</span>
-            {pntActive ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-          </div>
-
-          {/* IMU */}
-          <div className="px-2 py-1 rounded-[2px] border bg-[#080A0D] border-[#21262D] text-[#2EA043] text-[10px] flex items-center justify-between">
-            <span>IMU</span>
-            <Check className="w-3 h-3" />
-          </div>
-
-          {/* Visual Odometry */}
-          <div className="px-2 py-1 rounded-[2px] border bg-[#080A0D] border-[#21262D] text-[#2EA043] text-[10px] flex items-center justify-between">
-            <span>VO CAM</span>
-            <Check className="w-3 h-3" />
-          </div>
-
-          {/* Wheel Odometry */}
-          <div className="px-2 py-1 rounded-[2px] border bg-[#080A0D] border-[#21262D] text-[#2EA043] text-[10px] flex items-center justify-between">
-            <span>W-ODOM</span>
-            <Check className="w-3 h-3" />
-          </div>
+      <div className="px-4 py-3 flex flex-col gap-3">
+        {/* Flat Sensor Health Strip */}
+        <div className="flex items-center justify-between text-xs py-1">
+          {[
+            { label: 'PNT', ok: pntActive },
+            { label: 'IMU', ok: true },
+            { label: 'VO Cam', ok: true },
+            { label: 'W-Odom', ok: true },
+          ].map((s) => (
+            <div key={s.label} className="flex items-center gap-1.5 text-[#A1A1AA]">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${s.ok ? 'bg-emerald-500' : 'bg-red-500'}`}
+              />
+              <span className={s.ok ? 'text-[#F4F4F5]' : 'text-[#71717A]'}>{s.label}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Fallback Warning Flag */}
+        {/* Subtle Left-Accent Fallback Notice */}
         {isFallback && (
-          <div className="p-1.5 rounded-[2px] bg-[#F85149]/10 border border-[#F85149] text-[#F85149] text-[11px] flex items-center gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-            <div className="leading-tight">
-              <span className="font-bold">AUTONOMOUS DEAD RECKONING ACTIVE:</span> PNT denied. Propagating state covariance via IMU + VO + Wheel Odom.
-            </div>
+          <div className="px-3 py-2 border-l-2 border-red-500/80 bg-[#141417] text-xs text-[#A1A1AA] leading-relaxed">
+            <span className="text-[#F4F4F5] font-medium">Autonomous Dead Reckoning:</span> PNT denied. Propagating EKF covariance via IMU, VO & wheel odometry.
           </div>
         )}
 
-        {/* Position Error & Uncertainty Cards */}
-        <div className="grid grid-cols-2 gap-1.5">
-          <div className="telemetry-cell">
-            <div className="text-[9px] uppercase tracking-wider text-[#8B949E] flex items-center gap-1">
-              <Target className="w-2.5 h-2.5 text-[#58A6FF]" /> LOCALIZATION ERROR
+        <div className="h-px bg-[#1E1E22]" />
+
+        {/* Position Error & Uncertainty */}
+        <div className="grid grid-cols-2 gap-x-6">
+          <div>
+            <div className="text-[11px] text-[#71717A]">Localization Error</div>
+            <div className="text-base font-medium text-[#F4F4F5] num-readout mt-0.5">
+              {posError.toFixed(2)} <span className="text-[#71717A] text-xs">m</span>
             </div>
-            <div className="text-base font-semibold text-[#E6EDF3] num-readout mt-0.5 flex items-baseline gap-1">
-              <span>{posError.toFixed(2)}</span>
-              <span className="text-[10px] text-[#8B949E]">m</span>
-            </div>
-            <div className="text-[8px] text-[#6E7681]">|TRUE - EST|</div>
           </div>
 
-          <div className="telemetry-cell">
-            <div className="text-[9px] uppercase tracking-wider text-[#8B949E] flex items-center gap-1">
-              <Gauge className="w-2.5 h-2.5 text-[#D29922]" /> UNCERTAINTY (2σ)
+          <div>
+            <div className="text-[11px] text-[#71717A]">Uncertainty (2σ)</div>
+            <div className="text-base font-medium text-[#F4F4F5] num-readout mt-0.5 flex items-center gap-1.5">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  uncertainty > 2.5 ? 'bg-amber-500' : 'bg-emerald-500'
+                }`}
+              />
+              <span>±{uncertainty.toFixed(2)}</span>
+              <span className="text-[#71717A] text-xs">m</span>
             </div>
-            <div
-              className={`text-base font-semibold num-readout mt-0.5 flex items-baseline gap-1 ${
-                uncertainty > 2.5 ? 'text-[#D29922]' : 'text-[#2EA043]'
-              }`}
-            >
-              <span>{uncertainty.toFixed(2)}</span>
-              <span className="text-[10px] text-[#8B949E]">m</span>
-            </div>
-            <div className="text-[8px] text-[#6E7681]">COVARIANCE TRACE</div>
           </div>
         </div>
 
-        {/* 8-DOF State Vector Table */}
-        <div className="telemetry-cell text-[11px] space-y-1">
-          <div className="text-[9px] font-semibold uppercase tracking-wider text-[#8B949E] border-b border-[#21262D] pb-1">
-            ESTIMATED 8-DOF STATE VECTOR
+        <div className="h-px bg-[#1E1E22]" />
+
+        {/* 8-DOF State Vector Key-Value Rows */}
+        <div className="space-y-2 text-xs">
+          <div className="text-[11px] text-[#71717A] uppercase tracking-wider">
+            8-DOF State Vector
           </div>
-          <div className="flex justify-between items-center text-[11px]">
-            <span className="text-[#8B949E]">EST POS (X, Y):</span>
-            <span className="text-[#E6EDF3] font-semibold num-readout">
+          <div className="flex justify-between items-center">
+            <span className="text-[#71717A]">Est. Position</span>
+            <span className="text-[#F4F4F5] font-medium num-readout">
               {(ekf?.est_x ?? truePos.x ?? 50.0).toFixed(2)}m, {(ekf?.est_y ?? truePos.y ?? 50.0).toFixed(2)}m
             </span>
           </div>
-          <div className="flex justify-between items-center text-[11px]">
-            <span className="text-[#8B949E]">EST VEL (Vx, Vy):</span>
-            <span className="text-[#E6EDF3] num-readout">
-              {(ekf?.est_vx ?? 0.0).toFixed(2)}m/s, {(ekf?.est_vy ?? 0.0).toFixed(2)}m/s
+          <div className="flex justify-between items-center">
+            <span className="text-[#71717A]">Est. Velocity</span>
+            <span className="text-[#F4F4F5] num-readout">
+              {(ekf?.est_vx ?? 0.0).toFixed(2)}, {(ekf?.est_vy ?? 0.0).toFixed(2)} m/s
             </span>
           </div>
-          <div className="flex justify-between items-center text-[11px]">
-            <span className="text-[#8B949E]">EST HEADING (θ):</span>
-            <span className="text-[#E6EDF3] num-readout">{(ekf?.est_heading_deg ?? truePos.heading_deg ?? 0.0).toFixed(1)}°</span>
+          <div className="flex justify-between items-center">
+            <span className="text-[#71717A]">Est. Heading</span>
+            <span className="text-[#F4F4F5] num-readout">
+              {(ekf?.est_heading_deg ?? truePos.heading_deg ?? 0.0).toFixed(1)}°
+            </span>
           </div>
-          <div className="flex justify-between items-center text-[10px] text-[#6E7681] pt-1 border-t border-[#21262D]">
-            <span>IMU ACC BIAS:</span>
-            <span className="num-readout">{(ekf?.bias_estimates?.b_ax ?? 0.04).toFixed(4)} m/s²</span>
+          <div className="flex justify-between items-center pt-1.5 border-t border-[#1E1E22]">
+            <span className="text-[#71717A]">IMU Acc Bias</span>
+            <span className="text-[#A1A1AA] num-readout">
+              {(ekf?.bias_estimates?.b_ax ?? 0.04).toFixed(4)} m/s²
+            </span>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { History, Play, Pause, Radio, AlertOctagon, Zap, Wind, Users, ArrowRight } from 'lucide-react';
+import { History, Play, Pause, Radio } from 'lucide-react';
 import { TimelineEventMarker } from '../hooks/useSimulation';
 
 interface ReplayBarProps {
@@ -30,7 +30,7 @@ export const ReplayBar: React.FC<ReplayBarProps> = ({
   const [hoveredEvent, setHoveredEvent] = useState<TimelineEventMarker | null>(null);
 
   if (bufferLength < 10) {
-    return null; // Telemetry buffer initializing
+    return null;
   }
 
   const maxIndex = Math.max(0, bufferLength - 1);
@@ -44,141 +44,87 @@ export const ReplayBar: React.FC<ReplayBarProps> = ({
   const liveMetSec = Math.floor(liveTime_s % 60);
   const liveMetStr = `+${String(liveMetMin).padStart(2, '0')}:${String(liveMetSec).padStart(2, '0')}`;
 
-  const getMarkerIcon = (type: TimelineEventMarker['type']) => {
-    switch (type) {
-      case 'HAZARD':
-        return <AlertOctagon className="w-2.5 h-2.5" />;
-      case 'OUTAGE':
-        return <Zap className="w-2.5 h-2.5" />;
-      case 'STORM':
-        return <Wind className="w-2.5 h-2.5" />;
-      case 'SWARM':
-        return <Users className="w-2.5 h-2.5" />;
-      default:
-        return <Radio className="w-2.5 h-2.5" />;
-    }
-  };
-
   return (
-    <div className="w-full bg-[#0F1217]/95 backdrop-blur-md border border-[#21262D] rounded-[2px] shadow-panel p-2 font-mono text-xs select-none">
-      {/* Top Status & Controls Row */}
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        {/* Left: Black-Box Title & Clock */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-[#58A6FF] font-semibold text-[11px]">
-            <History className="w-3.5 h-3.5" />
-            <span>BLACK-BOX RECORDER</span>
-          </div>
-          <span className="text-[#8B949E] text-[10px]">
-            [{bufferLength} FRAMES]
+    <div className="w-full bg-[#0C0C0E]/95 backdrop-blur-md border-t border-[#222226] px-3 py-1.5 text-xs select-none">
+      <div className="flex items-center justify-between gap-3">
+        {/* Left: Label + Clock */}
+        <div className="flex items-center gap-2 shrink-0">
+          <History className="w-3.5 h-3.5 text-[#71717A]" />
+          <span className="text-[11px] font-medium text-[#A1A1AA]">Replay</span>
+          <span className="font-mono text-[11px] text-[#F4F4F5] tabular-nums">
+            {currentMetStr}
           </span>
-          <div className="flex items-center gap-1 text-[10px]">
-            <span className="text-[#8B949E]">MET:</span>
-            <span className={`font-bold tabular-nums ${isReplaying ? 'text-[#D29922]' : 'text-[#2EA043]'}`}>
-              {currentMetStr}
+          {isReplaying && (
+            <span className="font-mono text-[11px] text-[#71717A] tabular-nums">
+              / {liveMetStr}
             </span>
-            {isReplaying && (
-              <span className="text-[#8B949E] tabular-nums">
-                (LIVE: {liveMetStr})
-              </span>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* Right: Replay Controls & Return to Live */}
-        <div className="flex items-center gap-2">
-          {isReplaying ? (
-            <>
-              {/* Play / Pause Replay */}
-              <button
-                onClick={onTogglePlay}
-                className="btn-control py-0.5 px-2 bg-[#161B22] text-[#E6EDF3] hover:text-[#58A6FF] flex items-center gap-1 text-[10px]"
-                title={isReplayPlaying ? 'Pause Replay' : 'Play Replay (1x)'}
-              >
-                {isReplayPlaying ? (
-                  <>
-                    <Pause className="w-3 h-3 fill-current" />
-                    <span>PAUSE</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3 h-3 fill-current" />
-                    <span>PLAY REPLAY</span>
-                  </>
-                )}
-              </button>
+        {/* Center: Scrubber Track */}
+        <div className="relative flex-1 flex items-center py-1">
+          <input
+            type="range"
+            min={0}
+            max={maxIndex}
+            value={currentIndex}
+            onChange={(e) => onScrub(Number(e.target.value))}
+            className="w-full h-1 bg-[#222226] rounded-full appearance-none cursor-pointer accent-[#F4F4F5]"
+            title="Scrub telemetry history"
+          />
 
-              {/* Return to Live Button */}
-              <button
-                onClick={onReturnToLive}
-                className="btn-control py-0.5 px-2 bg-[#2EA043]/20 border-[#2EA043] text-[#2EA043] hover:bg-[#2EA043]/30 font-bold flex items-center gap-1.5 text-[10px] animate-pulse"
-                title="Exit historical scrub and return to real-time live telemetry stream"
+          {events.map((evt) => {
+            const pct = Math.max(0, Math.min(100, (evt.frameIndex / maxIndex) * 100));
+            return (
+              <div
+                key={evt.id}
+                className="absolute top-1/2 -translate-y-1/2 cursor-pointer z-10"
+                style={{ left: `${pct}%` }}
+                onClick={() => onScrub(evt.frameIndex)}
+                onMouseEnter={() => setHoveredEvent(evt)}
+                onMouseLeave={() => setHoveredEvent(null)}
               >
-                <Radio className="w-3 h-3" />
-                <span>RETURN TO LIVE</span>
-              </button>
-            </>
-          ) : (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#2EA043]/10 border border-[#2EA043]/40 rounded-[2px] text-[10px] text-[#2EA043]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#2EA043] animate-ping" />
-              <span className="font-semibold">REC LIVE</span>
+                <div className="w-2 h-2 rounded-full bg-[#F4F4F5] border border-[#09090B] hover:scale-125 transition-transform" />
+              </div>
+            );
+          })}
+
+          {hoveredEvent && (
+            <div
+              className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 bg-[#0C0C0E] border border-[#222226] rounded text-[10px] font-mono text-[#F4F4F5] whitespace-nowrap pointer-events-none z-30"
+              style={{ left: `${Math.max(5, Math.min(95, (hoveredEvent.frameIndex / maxIndex) * 100))}%` }}
+            >
+              {hoveredEvent.label} ({hoveredEvent.sim_time.toFixed(1)}s)
             </div>
           )}
         </div>
-      </div>
 
-      {/* Scrubber Track with Interactive Event Marker Flags */}
-      <div className="relative w-full flex items-center pt-1 pb-1">
-        {/* Range Slider */}
-        <input
-          type="range"
-          min={0}
-          max={maxIndex}
-          value={currentIndex}
-          onChange={(e) => onScrub(Number(e.target.value))}
-          className="w-full h-1.5 bg-[#161B22] rounded-[1px] appearance-none cursor-pointer accent-[#58A6FF] border border-[#21262D]"
-          title="Drag to scrub through historical black-box telemetry frames"
-        />
-
-        {/* Event Markers Overlay */}
-        {events.map((evt) => {
-          const pct = Math.max(0, Math.min(100, (evt.frameIndex / maxIndex) * 100));
-          return (
-            <div
-              key={evt.id}
-              className="absolute top-1/2 -translate-y-1/2 cursor-pointer z-10"
-              style={{ left: `${pct}%` }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onScrub(evt.frameIndex);
-              }}
-              onMouseEnter={() => setHoveredEvent(evt)}
-              onMouseLeave={() => setHoveredEvent(null)}
-            >
-              <div
-                className="w-2.5 h-2.5 rounded-full border border-[#080A0D] flex items-center justify-center -translate-x-1/2 transition-transform hover:scale-150"
-                style={{ backgroundColor: evt.color }}
-              />
+        {/* Right: Replay Controls */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {isReplaying ? (
+            <>
+              <button
+                onClick={onTogglePlay}
+                className="btn-control h-6 px-2 text-[11px]"
+              >
+                {isReplayPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                <span>{isReplayPlaying ? 'Pause' : 'Play'}</span>
+              </button>
+              <button
+                onClick={onReturnToLive}
+                className="btn-control h-6 px-2.5 text-[11px] bg-[#F4F4F5] text-[#09090B] border-[#F4F4F5] hover:bg-white hover:text-[#09090B]"
+              >
+                <Radio className="w-3 h-3" />
+                <span>Live</span>
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] font-mono px-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>Live</span>
             </div>
-          );
-        })}
-
-        {/* Hovered Event Tooltip */}
-        {hoveredEvent && (
-          <div
-            className="absolute -top-7 -translate-x-1/2 z-30 pointer-events-none bg-[#161B22] border border-[#21262D] rounded-[2px] px-2 py-0.5 text-[9px] whitespace-nowrap shadow-panel flex items-center gap-1"
-            style={{
-              left: `${Math.max(10, Math.min(90, (hoveredEvent.frameIndex / maxIndex) * 100))}%`,
-              color: hoveredEvent.color,
-            }}
-          >
-            {getMarkerIcon(hoveredEvent.type)}
-            <span className="font-bold">{hoveredEvent.label}</span>
-            <span className="text-[#8B949E] tabular-nums">
-              (MET +{Math.floor(hoveredEvent.sim_time / 60)}:{String(Math.floor(hoveredEvent.sim_time % 60)).padStart(2, '0')})
-            </span>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
