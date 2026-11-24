@@ -130,6 +130,7 @@ interface Rover3DProps {
   speed: number;
   isGhost?: boolean;
   assignedSatellite?: string | null;
+  hideLabel?: boolean;
 }
 
 const Rover3D: React.FC<Rover3DProps> = ({
@@ -144,6 +145,7 @@ const Rover3D: React.FC<Rover3DProps> = ({
   speed,
   isGhost = false,
   assignedSatellite,
+  hideLabel = false,
 }) => {
   const meshRef = useRef<THREE.Group>(null);
 
@@ -207,26 +209,28 @@ const Rover3D: React.FC<Rover3DProps> = ({
         ))
       )}
 
-      {/* 3D Floating Tactical Label */}
-      <Html
-        position={[0, 5.2, 0]}
-        center
-        distanceFactor={220}
-        zIndexRange={[10, 0]}
-      >
-        <div className="pointer-events-none select-none font-mono text-[10px] text-center whitespace-nowrap bg-[#0F1217]/90 backdrop-blur-md border border-[#21262D] rounded-[2px] px-2 py-0.5 shadow-panel">
-          <div className="font-bold flex items-center justify-center gap-1" style={{ color }}>
-            <span>{callsign.toUpperCase()}</span>
-            <span className="text-[8px] text-[#8B949E]">[{role.toUpperCase()}]</span>
+      {/* 3D Floating Tactical Label (hidden in Chase Cam so it never covers the rover) */}
+      {!hideLabel && (
+        <Html
+          position={[0, 7.5, 0]}
+          center
+          distanceFactor={220}
+          zIndexRange={[10, 0]}
+        >
+          <div className="pointer-events-none select-none font-mono text-[10px] text-center whitespace-nowrap bg-[#0C0C0E]/90 backdrop-blur-md border border-[#222226] rounded px-2 py-0.5">
+            <div className="font-semibold flex items-center justify-center gap-1" style={{ color }}>
+              <span>{callsign.toUpperCase()}</span>
+              <span className="text-[8px] text-[#71717A]">[{role.toUpperCase()}]</span>
+            </div>
+            <div className="text-[8px] text-[#A1A1AA] tabular-nums">
+              ±{uncertainty.toFixed(1)}m | {speed.toFixed(1)}m/s
+              {assignedSatellite && (
+                <span className="ml-1 text-emerald-400">({assignedSatellite})</span>
+              )}
+            </div>
           </div>
-          <div className="text-[8px] text-[#8B949E] tabular-nums">
-            ±{uncertainty.toFixed(1)}m | {speed.toFixed(1)}m/s
-            {assignedSatellite && (
-              <span className="ml-1 text-[#2EA043]">({assignedSatellite})</span>
-            )}
-          </div>
-        </div>
-      </Html>
+        </Html>
+      )}
     </group>
   );
 };
@@ -433,25 +437,34 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
       controls.target.set(width / 2, 0, height / 2);
       controls.object.position.set(width / 2, 720, height / 2 + 1);
     } else if (mode === 'FOLLOW') {
-      controls.target.set(leadRoverPos[0], leadRoverPos[1], leadRoverPos[2]);
       const heading = state?.rover?.heading_rad || 0;
+      // Aim slightly ahead & above the rover so the rover sits cleanly in the lower-center third
+      controls.target.set(
+        leadRoverPos[0] + Math.cos(heading) * 16,
+        leadRoverPos[1] + 6,
+        leadRoverPos[2] + Math.sin(heading) * 16
+      );
       controls.object.position.set(
-        leadRoverPos[0] - Math.cos(heading) * 45,
-        leadRoverPos[1] + 25,
-        leadRoverPos[2] - Math.sin(heading) * 45
+        leadRoverPos[0] - Math.cos(heading) * 65,
+        leadRoverPos[1] + 34,
+        leadRoverPos[2] - Math.sin(heading) * 65
       );
     }
   };
 
   // Follow camera tick
   const CameraFollowController: React.FC = () => {
-    const { camera } = useThree();
     useFrame(() => {
       if (cameraMode === 'FOLLOW' && controlsRef.current && state) {
         const controls = controlsRef.current;
+        const heading = state?.rover?.heading_rad || 0;
         controls.target.lerp(
-          new THREE.Vector3(leadRoverPos[0], leadRoverPos[1] + 2, leadRoverPos[2]),
-          0.05
+          new THREE.Vector3(
+            leadRoverPos[0] + Math.cos(heading) * 16,
+            leadRoverPos[1] + 6,
+            leadRoverPos[2] + Math.sin(heading) * 16
+          ),
+          0.08
         );
       }
     });
@@ -555,6 +568,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
             uncertainty={state.ekf?.uncertainty_m ?? 0.5}
             speed={state.rover.speed ?? 0}
             assignedSatellite={state.ai_scheduler?.selected_satellite ?? null}
+            hideLabel={cameraMode === 'FOLLOW'}
           />
         )}
 
@@ -694,50 +708,62 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
         ))}
       </Canvas>
 
-      {/* Floating 3D Camera Controls Toolbar (Top-Right) */}
-      <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-[#0F1217]/90 backdrop-blur-md border border-[#21262D] rounded-[2px] p-1 shadow-panel text-[10px]">
-        <span className="text-[9px] uppercase tracking-wider text-[#8B949E] px-1 font-semibold hidden sm:inline">
-          CAMERA:
+      {/* Top-Left Minimal 3D Telemetry Readout */}
+      <div className="absolute top-3 left-3 z-20 flex items-center gap-2.5 px-3 py-1.5 bg-[#0C0C0E]/80 backdrop-blur-md border border-[#222226] rounded-md font-mono text-[11px] text-[#A1A1AA] pointer-events-none">
+        <span className="text-[#F4F4F5] font-medium">
+          {cameraMode === 'FOLLOW' ? 'Chase Cam' : cameraMode === 'TOP_DOWN' ? 'Nadir' : 'Orbital'}
         </span>
+        <span className="text-[#222226]">·</span>
+        <span>
+          2σ <span className="text-[#F4F4F5] tabular-nums">±{(state?.ekf?.uncertainty_m ?? 0.5).toFixed(2)}m</span>
+        </span>
+        <span className="text-[#222226]">·</span>
+        <span>
+          <span className="text-[#F4F4F5] tabular-nums">{(state?.rover?.speed ?? 0).toFixed(1)}</span> m/s
+        </span>
+      </div>
+
+      {/* Floating 3D Camera Controls Toolbar (Top-Right) */}
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-0.5 bg-[#0C0C0E]/85 backdrop-blur-md border border-[#222226] rounded-md p-0.5 text-xs">
         <button
           onClick={() => setPreset('ORBITAL')}
-          className={`px-2 py-0.5 rounded-[1px] font-semibold transition-colors duration-150 ${
+          className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
             cameraMode === 'ORBITAL'
-              ? 'bg-[#58A6FF] text-[#080A0D] font-bold'
-              : 'text-[#8B949E] hover:text-[#E6EDF3]'
+              ? 'bg-[#F4F4F5] text-[#09090B]'
+              : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
           }`}
-          title="High-angle 3D theater orbital view"
+          title="High-angle 3D orbital view"
         >
-          ORBITAL
+          Orbital
         </button>
         <button
           onClick={() => setPreset('FOLLOW')}
-          className={`px-2 py-0.5 rounded-[1px] font-semibold transition-colors duration-150 ${
+          className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
             cameraMode === 'FOLLOW'
-              ? 'bg-[#58A6FF] text-[#080A0D] font-bold'
-              : 'text-[#8B949E] hover:text-[#E6EDF3]'
+              ? 'bg-[#F4F4F5] text-[#09090B]'
+              : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
           }`}
-          title="Close chase tracking view behind the lead rover"
+          title="Chase camera behind lead rover"
         >
-          CHASE CAM
+          Chase Cam
         </button>
         <button
           onClick={() => setPreset('TOP_DOWN')}
-          className={`px-2 py-0.5 rounded-[1px] font-semibold transition-colors duration-150 ${
+          className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
             cameraMode === 'TOP_DOWN'
-              ? 'bg-[#58A6FF] text-[#080A0D] font-bold'
-              : 'text-[#8B949E] hover:text-[#E6EDF3]'
+              ? 'bg-[#F4F4F5] text-[#09090B]'
+              : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
           }`}
-          title="Nadir 90-degree orbital pass view"
+          title="Nadir 90-degree view"
         >
-          NADIR
+          Nadir
         </button>
       </div>
 
       {/* Floating 3D Instructions Badge (Bottom-Right) */}
       <div className="absolute bottom-20 right-3 z-10 pointer-events-none hidden md:block">
-        <div className="text-[9px] font-mono text-[#8B949E] bg-[#0F1217]/85 border border-[#21262D] px-2 py-1 rounded-[2px] backdrop-blur-sm">
-          <span>LEFT CLICK: ROTATE | RIGHT CLICK: PAN | SCROLL: ZOOM</span>
+        <div className="text-[10px] font-mono text-[#71717A] bg-[#0C0C0E]/80 border border-[#222226] px-2.5 py-1 rounded-md backdrop-blur-sm">
+          <span>Drag: Rotate · Right-drag: Pan · Scroll: Zoom</span>
         </div>
       </div>
     </div>
