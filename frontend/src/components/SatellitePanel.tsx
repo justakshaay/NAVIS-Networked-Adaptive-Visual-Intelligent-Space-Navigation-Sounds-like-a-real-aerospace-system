@@ -1,5 +1,5 @@
 import React from 'react';
-import { Satellite, Radio, Camera, Cpu, Battery, Eye, CheckCircle2, XCircle, Sparkles } from 'lucide-react';
+import { Satellite, Radio, Camera, Cpu, Battery, Eye, CheckCircle2, XCircle } from 'lucide-react';
 import { SatelliteState, AISchedulerState } from '../types/simulation';
 
 interface SatellitePanelProps {
@@ -11,47 +11,49 @@ export const SatellitePanel: React.FC<SatellitePanelProps> = ({ satellites, aiSc
   const getTaskBadge = (task: string, isVisible: boolean) => {
     if (!isVisible || task === 'IDLE') {
       return (
-        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-500 border border-slate-700">
+        <span className="px-1.5 py-0.5 rounded-[2px] text-[9px] font-mono bg-[#161B22] text-[#8B949E] border border-[#21262D]">
           IDLE
         </span>
       );
     }
     if (task === 'PNT') {
       return (
-        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/40 flex items-center gap-1 shadow-neon-cyan/20">
-          <Radio className="w-3 h-3" /> PNT LOCK
+        <span className="px-1.5 py-0.5 rounded-[2px] text-[9px] font-mono font-bold bg-[#58A6FF]/15 text-[#58A6FF] border border-[#58A6FF]/40 flex items-center gap-1">
+          <Radio className="w-2.5 h-2.5" /> PNT LOCK
         </span>
       );
     }
     if (task === 'IMAGING') {
       return (
-        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/15 text-purple-300 border border-purple-500/40 flex items-center gap-1">
-          <Camera className="w-3 h-3" /> IMAGING
+        <span className="px-1.5 py-0.5 rounded-[2px] text-[9px] font-mono font-bold bg-[#BC8CFF]/15 text-[#BC8CFF] border border-[#BC8CFF]/40 flex items-center gap-1">
+          <Camera className="w-2.5 h-2.5" /> IMAGING
         </span>
       );
     }
     return (
-      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-neon-emerald/15 text-neon-emerald border border-neon-emerald/40 flex items-center gap-1">
-        <Satellite className="w-3 h-3" /> COMM RELAY
+      <span className="px-1.5 py-0.5 rounded-[2px] text-[9px] font-mono font-bold bg-[#2EA043]/15 text-[#2EA043] border border-[#2EA043]/40 flex items-center gap-1">
+        <Satellite className="w-2.5 h-2.5" /> COMM RELAY
       </span>
     );
   };
 
+  const visibleCount = satellites.filter((s) => s.is_visible).length;
+
   return (
-    <div className="panel-glass flex flex-col h-full overflow-hidden">
+    <div className="panel-matte flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="panel-glass-header">
-        <div className="flex items-center gap-2">
-          <Satellite className="w-4 h-4 text-neon-cyan" />
-          <span className="font-bold text-slate-200">SATELLITE NETWORK</span>
+      <div className="panel-header">
+        <div className="flex items-center gap-1.5">
+          <Satellite className="w-3.5 h-3.5 text-[#58A6FF]" />
+          <span>ORBITAL CONSTELLATION STATUS</span>
         </div>
-        <span className="text-[10px] font-mono text-neon-cyan">
-          {satellites.filter((s) => s.is_visible).length}/4 IN VIEW
+        <span className="text-[10px] font-mono text-[#58A6FF] num-readout">
+          {visibleCount}/4 IN VIEW
         </span>
       </div>
 
-      {/* Constellation Grid List */}
-      <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+      {/* Satellite Cards Grid */}
+      <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
         {satellites.map((sat) => {
           const isSelected = aiScheduler.selected_satellite === sat.sat_id;
           const score = aiScheduler.scores?.[sat.sat_id] || sat.score || 0;
@@ -59,93 +61,84 @@ export const SatellitePanel: React.FC<SatellitePanelProps> = ({ satellites, aiSc
           return (
             <div
               key={sat.sat_id}
-              className={`p-2.5 rounded-xl border transition-all relative ${
+              className={`p-2 rounded-[2px] border font-mono transition-colors relative ${
                 sat.is_outage
-                  ? 'bg-neon-crimson/5 border-neon-crimson/30'
+                  ? 'bg-[#080A0D] border-[#F85149]/40'
                   : sat.is_visible
                   ? isSelected
-                    ? 'bg-space-850 border-neon-cyan/50 shadow-neon-cyan/20'
-                    : 'bg-space-850 border-slate-700/60'
-                  : 'bg-space-900/50 border-slate-800/60 opacity-65'
+                    ? 'bg-[#161B22] border-[#58A6FF]/60'
+                    : 'bg-[#080A0D] border-[#21262D]'
+                  : 'bg-[#080A0D]/60 border-[#21262D] opacity-60'
               }`}
             >
-              {/* Star Badge if primary selected asset */}
-              {isSelected && sat.is_visible && (
-                <div className="absolute -top-2 -right-1 px-1.5 py-0.2 rounded-full bg-neon-cyan text-space-950 text-[9px] font-mono font-bold flex items-center gap-0.5 shadow-sm">
-                  <Sparkles className="w-2.5 h-2.5" /> AI PRIORITY
-                </div>
-              )}
-
-              {/* Title & Task */}
-              <div className="flex items-center justify-between gap-1 mb-1.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-bold text-xs text-white">{sat.sat_id}</span>
-                  <span className="text-[10px] text-slate-400 font-mono">({sat.name})</span>
+              {/* Header: ID + Name + Task Badge */}
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-xs text-[#E6EDF3]">{sat.sat_id}</span>
+                  <span className="text-[10px] text-[#8B949E]">({sat.name})</span>
                 </div>
                 {getTaskBadge(sat.current_task, sat.is_visible)}
               </div>
 
-              {/* Visibility & Elevation */}
-              <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+              {/* Orbital Visibility & Elevation */}
+              <div className="flex items-center justify-between text-[10px] mb-1">
                 <div className="flex items-center gap-1">
                   {sat.is_outage ? (
-                    <span className="text-neon-crimson flex items-center gap-1">
+                    <span className="text-[#F85149] flex items-center gap-1">
                       <XCircle className="w-3 h-3" /> OUTAGE
                     </span>
                   ) : sat.is_visible ? (
-                    <span className="text-neon-emerald flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> VISIBLE
+                    <span className="text-[#2EA043] flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> LOS LOCK
                     </span>
                   ) : (
-                    <span className="text-slate-500 flex items-center gap-1">
-                      <XCircle className="w-3 h-3" /> NOT VISIBLE
+                    <span className="text-[#8B949E] flex items-center gap-1">
+                      <XCircle className="w-3 h-3" /> BELOW HORIZON
                     </span>
                   )}
                 </div>
-                <span className="text-slate-400">ELEV: {sat.elevation_deg}°</span>
+                <span className="text-[#8B949E] num-readout">ELEV: {sat.elevation_deg}°</span>
               </div>
 
               {/* Altitude & Battery */}
-              <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-2">
+              <div className="flex items-center justify-between text-[10px] text-[#8B949E] mb-1.5 num-readout">
                 <span>ALT: {sat.altitude_km} km</span>
                 <div className="flex items-center gap-1">
-                  <Battery className="w-3 h-3 text-slate-400" />
+                  <Battery className="w-3 h-3 text-[#8B949E]" />
                   <span>{sat.battery_pct.toFixed(0)}%</span>
                 </div>
               </div>
 
-              {/* AI Dynamic Score Meter */}
-              <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden mb-1">
+              {/* AI Utility Score Meter */}
+              <div className="w-full bg-[#161B22] rounded-[1px] h-1 overflow-hidden mb-1 border border-[#21262D]">
                 <div
                   className={`h-full transition-all duration-300 ${
                     sat.current_task === 'PNT'
-                      ? 'bg-neon-cyan'
+                      ? 'bg-[#58A6FF]'
                       : sat.current_task === 'IMAGING'
-                      ? 'bg-purple-400'
-                      : 'bg-neon-emerald'
+                      ? 'bg-[#BC8CFF]'
+                      : 'bg-[#2EA043]'
                   }`}
                   style={{ width: `${Math.min(100, Math.max(5, score * 100))}%` }}
                 />
               </div>
-              <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
-                <span>AI MATCH SCORE</span>
-                <span className="text-slate-300 font-bold">{score.toFixed(2)}</span>
+              <div className="flex items-center justify-between text-[9px] text-[#8B949E] num-readout">
+                <span>AI UTILITY SCORE</span>
+                <span className="text-[#E6EDF3] font-bold">{score.toFixed(2)}</span>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* AI Scheduler Explainability Card */}
+      {/* AI Scheduler Matrix Rationale Summary */}
       {aiScheduler.reason_summary && (
-        <div className="mx-3 mb-3 p-2 rounded-lg bg-neon-cyan/5 border border-neon-cyan/20 flex items-start gap-2 text-[11px] font-mono">
-          <Cpu className="w-4 h-4 text-neon-cyan shrink-0 mt-0.5" />
-          <div>
-            <div className="text-neon-cyan font-semibold flex items-center gap-1.5">
-              <span>AI SCHEDULER DECISION MATRIX</span>
-            </div>
-            <p className="text-slate-300 mt-0.5">{aiScheduler.reason_summary}</p>
+        <div className="mx-2 mb-2 p-1.5 rounded-[2px] bg-[#161B22] border border-[#21262D] text-[10px] font-mono">
+          <div className="flex items-center gap-1.5 text-[#58A6FF] font-semibold mb-0.5">
+            <Cpu className="w-3 h-3" />
+            <span>AI SCHEDULER RATIONALE</span>
           </div>
+          <p className="text-[#8B949E] leading-relaxed">{aiScheduler.reason_summary}</p>
         </div>
       )}
     </div>

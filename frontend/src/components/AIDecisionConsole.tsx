@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Filter, ShieldAlert, Cpu, Route, Sparkles } from 'lucide-react';
+import { Terminal, ShieldAlert } from 'lucide-react';
 import { MissionLogEntry } from '../types/simulation';
 
 interface AIDecisionConsoleProps {
@@ -10,7 +10,6 @@ export const AIDecisionConsole: React.FC<AIDecisionConsoleProps> = ({ logs }) =>
   const [filter, setFilter] = useState<'ALL' | 'HAZARD' | 'SCHEDULER' | 'PLANNER' | 'OUTAGE'>('ALL');
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -22,37 +21,41 @@ export const AIDecisionConsole: React.FC<AIDecisionConsoleProps> = ({ logs }) =>
     return log.category.toUpperCase().includes(filter);
   });
 
-  const getBadgeStyle = (level: string) => {
-    switch (level) {
-      case 'danger':
-        return 'text-neon-crimson bg-neon-crimson/10 border-neon-crimson/30';
-      case 'warning':
-        return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-      case 'success':
-        return 'text-neon-emerald bg-neon-emerald/10 border-neon-emerald/30';
-      default:
-        return 'text-neon-cyan bg-neon-cyan/10 border-neon-cyan/30';
+  const getCategoryBadge = (level: string, category: string) => {
+    let colorClass = 'text-[#58A6FF] border-[#58A6FF]/40 bg-[#58A6FF]/10';
+    if (level === 'danger') {
+      colorClass = 'text-[#F85149] border-[#F85149]/40 bg-[#F85149]/10';
+    } else if (level === 'warning') {
+      colorClass = 'text-[#D29922] border-[#D29922]/40 bg-[#D29922]/10';
+    } else if (level === 'success') {
+      colorClass = 'text-[#2EA043] border-[#2EA043]/40 bg-[#2EA043]/10';
     }
+
+    return (
+      <span className={`px-1 py-0.2 rounded-[1px] text-[9px] font-bold border shrink-0 ${colorClass}`}>
+        {category}
+      </span>
+    );
   };
 
   return (
-    <div className="panel-glass flex flex-col h-full overflow-hidden">
-      {/* Console Header & Filter Bar */}
-      <div className="panel-glass-header">
-        <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-neon-cyan" />
-          <span className="font-bold text-slate-200">AI DECISION & EVENT LOG</span>
+    <div className="panel-matte flex flex-col overflow-hidden">
+      {/* Console Header & Filters */}
+      <div className="panel-header">
+        <div className="flex items-center gap-1.5">
+          <Terminal className="w-3.5 h-3.5 text-[#58A6FF]" />
+          <span>AI DECISION & RECON LOG</span>
         </div>
         {/* Filters */}
-        <div className="flex items-center gap-1 font-mono text-[10px]">
+        <div className="flex items-center gap-0.5 font-mono text-[9px]">
           {(['ALL', 'HAZARD', 'SCHEDULER', 'PLANNER', 'OUTAGE'] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-1.5 py-0.5 rounded transition-all ${
+              className={`px-1.5 py-0.5 rounded-[2px] transition-colors duration-150 ${
                 filter === f
-                  ? 'bg-neon-cyan/20 text-neon-cyan font-bold border border-neon-cyan/30'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-[#21262D] text-[#58A6FF] font-semibold border border-[#30363D]'
+                  : 'text-[#8B949E] hover:text-[#E6EDF3]'
               }`}
             >
               {f}
@@ -64,30 +67,34 @@ export const AIDecisionConsole: React.FC<AIDecisionConsoleProps> = ({ logs }) =>
       {/* Terminal Output Area */}
       <div
         ref={scrollRef}
-        className="p-3 flex-1 overflow-y-auto space-y-2 font-mono text-xs max-h-[220px] bg-space-950/60"
+        className="p-2 flex-1 overflow-y-auto space-y-1.5 font-mono text-xs max-h-[220px] bg-[#080A0D]"
       >
         {filteredLogs.length === 0 ? (
-          <div className="text-slate-500 text-center py-6">Awaiting telemetry & decision events...</div>
+          <div className="h-28 flex flex-col items-center justify-center text-center text-[#6E7681] text-[11px] font-mono border border-dashed border-[#21262D] rounded-[2px] m-1">
+            <span className="text-[#8B949E] font-semibold flex items-center gap-1.5 mb-1">
+              <span className="w-2 h-2 rounded-full bg-[#58A6FF] animate-pulse" />
+              TELEMETRY STREAM INITIALIZED
+            </span>
+            <span className="text-[10px]">Awaiting AI constellation decisions & reconnaissance events...</span>
+          </div>
         ) : (
           filteredLogs.map((log) => (
             <div
               key={log.id}
-              className="flex items-start gap-2 leading-relaxed border-b border-slate-800/40 pb-1.5"
+              className="flex items-start gap-1.5 leading-tight border-b border-[#21262D]/50 pb-1"
             >
-              <span className="text-slate-500 text-[10px] shrink-0 mt-0.5">[{log.time}]</span>
-              <span className="text-slate-400 text-[10px] shrink-0 mt-0.5">{log.met}</span>
-              <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold border shrink-0 ${getBadgeStyle(log.level)}`}>
-                {log.category}
-              </span>
+              <span className="text-[#6E7681] text-[10px] shrink-0 tabular-nums">[{log.time}]</span>
+              <span className="text-[#8B949E] text-[10px] shrink-0 tabular-nums">{log.met}</span>
+              {getCategoryBadge(log.level, log.category)}
               <span
-                className={`text-[11px] ${
+                className={`text-[11px] leading-snug ${
                   log.level === 'danger'
-                    ? 'text-red-300 font-semibold'
+                    ? 'text-[#F85149]'
                     : log.level === 'warning'
-                    ? 'text-amber-200'
+                    ? 'text-[#D29922]'
                     : log.level === 'success'
-                    ? 'text-emerald-300 font-semibold'
-                    : 'text-slate-300'
+                    ? 'text-[#2EA043]'
+                    : 'text-[#E6EDF3]'
                 }`}
               >
                 {log.message}

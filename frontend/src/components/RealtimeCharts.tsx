@@ -10,7 +10,7 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
-import { LineChart as ChartIcon, Activity, TrendingUp, ShieldAlert, Cpu } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { PerformanceMetricsState } from '../types/simulation';
 
 interface RealtimeChartsProps {
@@ -46,31 +46,31 @@ export const RealtimeCharts: React.FC<RealtimeChartsProps> = ({ metrics, simTime
   }, [metrics, simTime]);
 
   return (
-    <div className="panel-glass flex flex-col h-full overflow-hidden">
+    <div className="panel-matte flex flex-col overflow-hidden">
       {/* Chart Header */}
-      <div className="panel-glass-header">
-        <div className="flex items-center gap-2">
-          <ChartIcon className="w-4 h-4 text-neon-cyan" />
-          <span className="font-bold text-slate-200">REAL-TIME PERFORMANCE TELEMETRY</span>
+      <div className="panel-header">
+        <div className="flex items-center gap-1.5">
+          <Activity className="w-3.5 h-3.5 text-[#58A6FF]" />
+          <span>REAL-TIME PERFORMANCE TELEMETRY</span>
         </div>
         {/* Toggle Charts */}
-        <div className="flex items-center gap-1 font-mono text-[10px]">
+        <div className="flex items-center gap-0.5 font-mono text-[9px]">
           <button
             onClick={() => setSelectedChart('ERROR_UNCERTAINTY')}
-            className={`px-2 py-0.5 rounded transition-all ${
+            className={`px-1.5 py-0.5 rounded-[2px] transition-colors duration-150 ${
               selectedChart === 'ERROR_UNCERTAINTY'
-                ? 'bg-neon-cyan/20 text-neon-cyan font-bold border border-neon-cyan/30'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#21262D] text-[#58A6FF] font-semibold border border-[#30363D]'
+                : 'text-[#8B949E] hover:text-[#E6EDF3]'
             }`}
           >
-            ERROR vs UNCERTAINTY
+            ERROR / UNCERTAINTY
           </button>
           <button
             onClick={() => setSelectedChart('SATELLITE_USAGE')}
-            className={`px-2 py-0.5 rounded transition-all ${
+            className={`px-1.5 py-0.5 rounded-[2px] transition-colors duration-150 ${
               selectedChart === 'SATELLITE_USAGE'
-                ? 'bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#21262D] text-[#BC8CFF] font-semibold border border-[#30363D]'
+                : 'text-[#8B949E] hover:text-[#E6EDF3]'
             }`}
           >
             SATELLITE UTILIZATION
@@ -79,38 +79,44 @@ export const RealtimeCharts: React.FC<RealtimeChartsProps> = ({ metrics, simTime
       </div>
 
       {/* Chart Canvas Area */}
-      <div className="p-3 flex-1 min-h-[160px] w-full">
-        {selectedChart === 'ERROR_UNCERTAINTY' ? (
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={history} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+      <div className="p-2 w-full bg-[#080A0D]">
+        {history.length === 0 ? (
+          <div className="h-[150px] flex flex-col items-center justify-center text-[#6E7681] text-xs font-mono border border-dashed border-[#21262D] rounded-[2px]">
+            <span>ACQUIRING PERFORMANCE TIME SERIES...</span>
+            <span className="text-[10px] text-[#8B949E] mt-1">Start mission execution to stream metrics</span>
+          </div>
+        ) : selectedChart === 'ERROR_UNCERTAINTY' ? (
+          <ResponsiveContainer width="100%" height={150}>
+            <AreaChart data={history} margin={{ top: 5, right: 10, left: -25, bottom: 0 }}>
               <defs>
                 <linearGradient id="errorGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#F85149" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#F85149" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="uncGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00f0ff" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#00f0ff" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#58A6FF" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#58A6FF" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10, fill: '#64748b' }} unit="s" />
-              <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#64748b' }} unit="m" />
+              <CartesianGrid strokeDasharray="2 2" stroke="#21262D" vertical={false} />
+              <XAxis dataKey="time" stroke="#6E7681" tick={{ fontSize: 9, fill: '#8B949E', fontFamily: 'monospace' }} unit="s" />
+              <YAxis stroke="#6E7681" tick={{ fontSize: 9, fill: '#8B949E', fontFamily: 'monospace' }} unit="m" />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#080d1a',
-                  borderColor: '#334155',
-                  borderRadius: '8px',
-                  fontSize: '11px',
+                  backgroundColor: '#0F1217',
+                  borderColor: '#21262D',
+                  borderRadius: '2px',
+                  fontSize: '10px',
                   fontFamily: 'monospace',
+                  color: '#E6EDF3',
                 }}
               />
               <Area
                 type="monotone"
                 dataKey="posError"
                 name="Position Error (m)"
-                stroke="#ef4444"
-                strokeWidth={2}
+                stroke="#F85149"
+                strokeWidth={1.5}
                 fillOpacity={1}
                 fill="url(#errorGrad)"
                 isAnimationActive={false}
@@ -118,9 +124,9 @@ export const RealtimeCharts: React.FC<RealtimeChartsProps> = ({ metrics, simTime
               <Area
                 type="monotone"
                 dataKey="uncertainty"
-                name="Uncertainty (2σ)"
-                stroke="#00f0ff"
-                strokeWidth={2}
+                name="Uncertainty 2σ (m)"
+                stroke="#58A6FF"
+                strokeWidth={1.5}
                 fillOpacity={1}
                 fill="url(#uncGrad)"
                 isAnimationActive={false}
@@ -128,26 +134,27 @@ export const RealtimeCharts: React.FC<RealtimeChartsProps> = ({ metrics, simTime
             </AreaChart>
           </ResponsiveContainer>
         ) : (
-          <ResponsiveContainer width="100%" height={160}>
-            <LineChart data={history} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10, fill: '#64748b' }} unit="s" />
-              <YAxis domain={[0, 4]} stroke="#64748b" tick={{ fontSize: 10, fill: '#64748b' }} />
+          <ResponsiveContainer width="100%" height={150}>
+            <LineChart data={history} margin={{ top: 5, right: 10, left: -25, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="2 2" stroke="#21262D" vertical={false} />
+              <XAxis dataKey="time" stroke="#6E7681" tick={{ fontSize: 9, fill: '#8B949E', fontFamily: 'monospace' }} unit="s" />
+              <YAxis domain={[0, 4]} stroke="#6E7681" tick={{ fontSize: 9, fill: '#8B949E', fontFamily: 'monospace' }} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#080d1a',
-                  borderColor: '#334155',
-                  borderRadius: '8px',
-                  fontSize: '11px',
+                  backgroundColor: '#0F1217',
+                  borderColor: '#21262D',
+                  borderRadius: '2px',
+                  fontSize: '10px',
                   fontFamily: 'monospace',
+                  color: '#E6EDF3',
                 }}
               />
               <Line
                 type="stepAfter"
                 dataKey="activeSats"
-                name="Active Orbiters"
-                stroke="#a855f7"
-                strokeWidth={2.5}
+                name="Active Satellites"
+                stroke="#BC8CFF"
+                strokeWidth={1.5}
                 dot={false}
                 isAnimationActive={false}
               />

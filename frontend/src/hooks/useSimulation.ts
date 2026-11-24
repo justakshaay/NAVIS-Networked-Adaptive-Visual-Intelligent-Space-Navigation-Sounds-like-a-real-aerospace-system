@@ -135,6 +135,15 @@ export function useSimulation() {
 
   const runDemo = useCallback(() => sendCommand({ action: 'demo' }), [sendCommand]);
 
+  const toggleShadowRace = useCallback((enabled: boolean) => {
+    sendCommand({ action: 'toggle_shadow_race', enabled });
+    fetch(`${apiBase}/api/simulation/shadow_race`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }).catch(() => {});
+  }, [sendCommand, apiBase]);
+
   const runBenchmark = useCallback(async (seed = 42) => {
     setIsBenchmarking(true);
     try {
@@ -168,6 +177,7 @@ export function useSimulation() {
     restoreSatellite,
     injectHazard,
     runDemo,
+    toggleShadowRace,
     runBenchmark,
     clearBenchmark: () => setBenchmarkResult(null),
   };

@@ -56,6 +56,15 @@ class SimulationEngine:
         self.metrics = PerformanceMetrics()
         self.demo_runner = DemoMissionRunner(self)
 
+        # Shadow Race (Mode A vs Mode C) Subsystem
+        self.shadow_race_enabled: bool = False
+        self.shadow_rover: Optional[MarsRover] = None
+        self.shadow_sensors: Optional[SensorSuite] = None
+        self.shadow_ekf: Optional[NAVIS_EKF] = None
+        self.shadow_trail: List[List[float]] = []
+        self.shadow_hazard_collisions: int = 0
+        self.shadow_collided_hazard_ids: set[str] = set()
+
         # AI Decision & Event Log
         self.logs: List[Dict[str, Any]] = []
         self.max_logs = 200
@@ -108,6 +117,54 @@ class SimulationEngine:
         self.is_running = False
         self.add_log("CONTROL", "Mission Simulation Paused.", "warning")
 
+    @property
+    def running(self) -> bool:
+        return self.is_running
+
+    @running.setter
+    def running(self, value: bool) -> None:
+        self.is_running = bool(value)
+
+    def _initialize_shadow_rover(self) -> None:
+        """Instantiate or reset parallel dead-reckoning shadow rover."""
+        self.shadow_rover = MarsRover(
+            start_x=float(self.terrain.start_pos[0]),
+            start_y=float(self.terrain.start_pos[1]),
+            target_x=float(self.terrain.target_pos[0]),
+            target_y=float(self.terrain.target_pos[1]),
+        )
+        initial_route = self.planner.plan_path(self.terrain.start_pos, self.terrain.target_pos)
+        self.shadow_rover.set_path(list(initial_route))
+        self.shadow_sensors = SensorSuite(seed=self.seed + 101)
+        self.shadow_sensors.reset(self.terrain.start_pos, self.shadow_rover.heading)
+        self.shadow_ekf = NAVIS_EKF(
+            start_x=float(self.terrain.start_pos[0]),
+            start_y=float(self.terrain.start_pos[1]),
+            start_heading=float(self.shadow_rover.heading),
+        )
+        self.shadow_trail = [[float(self.terrain.start_pos[0]), float(self.terrain.start_pos[1])]]
+        self.shadow_hazard_collisions = 0
+        self.shadow_collided_hazard_ids = set()
+
+    def toggle_shadow_race(self, enabled: bool) -> None:
+        """Toggle live Mode A (Dead Reckon) vs Mode C (NAVIS AI) shadow race."""
+        self.shadow_race_enabled = bool(enabled)
+        if enabled:
+            self.active_mode = NavigationMode.MODE_C
+            self.reset()
+            self._initialize_shadow_rover()
+            self.is_running = True
+            self.add_log("RACE", "🏁 SHADOW RACE ENGAGED: Mode A (Dead Reckoning) vs Mode C (NAVIS AI)", "warning")
+            self.add_log("CONTROL", "Mission Simulation Running.", "success")
+        else:
+            self.shadow_rover = None
+            self.shadow_sensors = None
+            self.shadow_ekf = None
+            self.shadow_trail = []
+            self.shadow_hazard_collisions = 0
+            self.shadow_collided_hazard_ids = set()
+            self.add_log("RACE", "Shadow Race mode deactivated.", "info")
+
     def reset(self, seed: Optional[int] = None) -> None:
         """Reset whole simulation to starting state."""
         if seed is not None:
@@ -122,6 +179,11 @@ class SimulationEngine:
         self.hazard_detector = VisualHazardDetector(self.terrain)
         self.demo_runner.stop_demo()
         self._initialize_mission()
+
+        if self.shadow_race_enabled:
+            self.active_mode = NavigationMode.MODE_C
+            self._initialize_shadow_rover()
+
         self.add_log("CONTROL", "Mission Simulation Reset to Origin.", "info")
 
     def set_speed(self, multiplier: float) -> None:
@@ -129,6 +191,9 @@ class SimulationEngine:
         self.add_log("CONTROL", f"Simulation speed multiplier set to {self.speed_multiplier}x", "info")
 
     def set_mode(self, mode: str) -> None:
+        if self.shadow_race_enabled:
+            self.add_log("MODE", "Shadow Race active: Architecture locked to Mode C vs Mode A comparison.", "info")
+            return
         if mode in [NavigationMode.MODE_A, NavigationMode.MODE_B, NavigationMode.MODE_C]:
             self.active_mode = mode
             desc = ModeConfig.DESCRIPTIONS[mode]
@@ -284,7 +349,67 @@ class SimulationEngine:
                 self.rover.set_path(replan_res["new_route"])
                 self.add_log("PLANNER", "Dynamic route replanning complete. Executing safe bypass ✓", "success")
 
-        # 6. Update Performance Metrics
+        # 6. Step Shadow Rover (Mode A Dead Reckoning) if Shadow Race is Active
+        if self.shadow_race_enabled and self.shadow_rover and self.shadow_ekf and self.shadow_sensors:
+            try:
+                s_cost = float(self.terrain.get_cost(self.shadow_rover.x, self.shadow_rover.y))
+                s_slope = float(self.terrain.get_slope(self.shadow_rover.x, self.shadow_rover.y))
+
+                # Sample sensors for shadow rover with PNT completely denied (Mode A)
+                shadow_meas = self.shadow_sensors.sample(
+                    dt=dt,
+                    true_x=float(self.shadow_rover.x),
+                    true_y=float(self.shadow_rover.y),
+                    true_vx=float(self.shadow_rover.vx),
+                    true_vy=float(self.shadow_rover.vy),
+                    true_heading=float(self.shadow_rover.heading),
+                    true_speed=float(self.shadow_rover.speed),
+                    true_accel=float(self.shadow_rover.accel),
+                    true_omega=float(self.shadow_rover.angular_velocity),
+                    wheel_slip=float(self.shadow_rover.wheel_slip),
+                    pnt_available=False,
+                )
+
+                # EKF step for shadow rover (dead reckoning only)
+                self.shadow_ekf.step(dt, shadow_meas)
+
+                # Update shadow rover kinematics towards original waypoints without replanning
+                self.shadow_rover.update(
+                    dt=dt,
+                    sim_time=self.sim_time,
+                    terrain_cost=s_cost,
+                    terrain_slope=s_slope,
+                    is_outage=True,
+                )
+
+                # Append to trail
+                if not self.shadow_trail or math.hypot(self.shadow_rover.x - self.shadow_trail[-1][0], self.shadow_rover.y - self.shadow_trail[-1][1]) >= 1.2:
+                    self.shadow_trail.append([round(float(self.shadow_rover.x), 2), round(float(self.shadow_rover.y), 2)])
+                    if len(self.shadow_trail) > 250:
+                        self.shadow_trail.pop(0)
+
+                # Check collisions with craters
+                for cr in self.terrain.craters:
+                    cr_id = f"cr_{int(cr['x'])}_{int(cr['y'])}"
+                    if cr_id not in self.shadow_collided_hazard_ids:
+                        if math.hypot(self.shadow_rover.x - cr["x"], self.shadow_rover.y - cr["y"]) <= cr["radius"] * 0.85:
+                            self.shadow_collided_hazard_ids.add(cr_id)
+                            self.shadow_hazard_collisions += 1
+                            self.add_log("RACE", f"💥 SHADOW ROVER (Mode A) drifted into CRATER PIT at ({cr['x']:.0f}, {cr['y']:.0f})", "danger")
+
+                # Check collisions with injected hazards
+                for hz in self.terrain.injected_hazards:
+                    hz_id = hz["id"]
+                    if hz_id not in self.shadow_collided_hazard_ids:
+                        if math.hypot(self.shadow_rover.x - hz["x"], self.shadow_rover.y - hz["y"]) <= hz["radius"] * 0.85:
+                            self.shadow_collided_hazard_ids.add(hz_id)
+                            self.shadow_hazard_collisions += 1
+                            self.add_log("RACE", f"💥 SHADOW ROVER (Mode A) collided with {hz.get('type', 'HAZARD')} at ({hz['x']:.0f}, {hz['y']:.0f})", "danger")
+            except Exception as e:
+                import logging
+                logging.getLogger("NAVIS-BACKEND").error(f"Error stepping shadow rover: {e}", exc_info=True)
+
+        # 7. Update Performance Metrics
         est_pos = (self.latest_ekf.get("est_x", self.rover.x), self.latest_ekf.get("est_y", self.rover.y))
         self.metrics.update(
             sim_time=self.sim_time,
@@ -300,11 +425,38 @@ class SimulationEngine:
         est_pos = (self.latest_ekf.get("est_x", self.rover.x), self.latest_ekf.get("est_y", self.rover.y))
         err = math.hypot(self.rover.x - est_pos[0], self.rover.y - est_pos[1])
 
+        shadow_data = None
+        if self.shadow_race_enabled and self.shadow_rover and self.shadow_ekf:
+            try:
+                s_ekf_x = float(self.shadow_ekf.x[0])
+                s_ekf_y = float(self.shadow_ekf.x[1])
+                s_err = math.hypot(self.shadow_rover.x - s_ekf_x, self.shadow_rover.y - s_ekf_y)
+                s_goal_dist = math.hypot(
+                    self.shadow_rover.x - self.shadow_rover.target_pos[0],
+                    self.shadow_rover.y - self.shadow_rover.target_pos[1],
+                )
+                shadow_data = {
+                    "true_pos": [round(float(self.shadow_rover.x), 2), round(float(self.shadow_rover.y), 2)],
+                    "ekf_pos": [round(float(s_ekf_x), 2), round(float(s_ekf_y), 2)],
+                    "heading": round(float(self.shadow_rover.heading), 3),
+                    "speed": round(float(self.shadow_rover.speed), 2),
+                    "localization_error": round(float(s_err), 2),
+                    "trail": self.shadow_trail[-100:],
+                    "hazard_collisions": int(self.shadow_hazard_collisions),
+                    "distance_to_goal": round(float(s_goal_dist), 2),
+                    "mission_status": str(self.shadow_rover.mission_status),
+                }
+            except Exception as e:
+                import logging
+                logging.getLogger("NAVIS-BACKEND").error(f"Error compiling shadow rover telemetry: {e}", exc_info=True)
+
         return {
             "sim_time": round(self.sim_time, 2),
             "is_running": self.is_running,
             "speed_multiplier": self.speed_multiplier,
             "active_mode": self.active_mode,
+            "shadow_race_enabled": self.shadow_race_enabled,
+            "shadow_rover": shadow_data,
             "mode_meta": ModeConfig.DESCRIPTIONS[self.active_mode],
             "rover": self.rover.to_dict(),
             "satellites": self.constellation.to_list(),

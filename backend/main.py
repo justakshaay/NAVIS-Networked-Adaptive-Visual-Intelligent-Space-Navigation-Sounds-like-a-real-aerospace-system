@@ -38,6 +38,10 @@ class ModeRequest(BaseModel):
     mode: str = Field(..., pattern="^(MODE_A|MODE_B|MODE_C)$")
 
 
+class ShadowRaceRequest(BaseModel):
+    enabled: bool = True
+
+
 class HazardInjectRequest(BaseModel):
     x: float
     y: float
@@ -180,6 +184,16 @@ async def set_mode(req: ModeRequest):
     return {"status": "SUCCESS", "active_mode": engine.active_mode}
 
 
+@app.post("/api/simulation/shadow_race")
+async def toggle_shadow_race_api(req: ShadowRaceRequest):
+    engine.toggle_shadow_race(req.enabled)
+    return {
+        "status": "SUCCESS",
+        "shadow_race_enabled": engine.shadow_race_enabled,
+        "is_running": engine.is_running,
+    }
+
+
 @app.get("/api/rover")
 async def get_rover():
     return {
@@ -309,6 +323,10 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                     )
                 elif action == "demo":
                     engine.demo_runner.start_demo()
+                elif action == "toggle_shadow_race":
+                    raw_en = cmd.get("enabled", True)
+                    en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))
+                    engine.toggle_shadow_race(en)
             except Exception as e:
                 logger.error(f"Error handling WebSocket message: {e}")
 

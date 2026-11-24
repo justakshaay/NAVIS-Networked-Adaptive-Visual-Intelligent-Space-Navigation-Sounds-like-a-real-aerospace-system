@@ -22,6 +22,18 @@ export interface RoverState {
   dist_to_target: number;
 }
 
+export interface ShadowRoverState {
+  true_pos: [number, number];
+  ekf_pos: [number, number];
+  heading: number;
+  speed: number;
+  localization_error: number;
+  trail: Array<[number, number]>;
+  hazard_collisions: number;
+  distance_to_goal: number;
+  mission_status: string;
+}
+
 export interface SatelliteState {
   sat_id: string;
   name: string;
@@ -181,6 +193,8 @@ export interface SimulationFullState {
   is_running: boolean;
   speed_multiplier: number;
   active_mode: 'MODE_A' | 'MODE_B' | 'MODE_C';
+  shadow_race_enabled: boolean;
+  shadow_rover?: ShadowRoverState | null;
   mode_meta: {
     name: string;
     tag: string;

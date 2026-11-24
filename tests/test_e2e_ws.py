@@ -85,6 +85,37 @@ async def test_e2e_websocket():
         print(f"[OK] Demo Mission Active: {demo_status['is_active']}, Stage: {demo_status['current_stage_idx']+1}/{len(demo_status['stages'])}")
         assert demo_status['is_active'] is True
 
+        # 7. Test Shadow Race (Mode A vs Mode C)
+        await ws.send(json.dumps({"action": "toggle_shadow_race", "enabled": True}))
+        print("[OK] Toggled Shadow Race ON via WebSocket...")
+
+        # Receive 40 frames (~2 seconds of motion at 20Hz)
+        for _ in range(40):
+            msg = await ws.recv()
+            state = json.loads(msg)
+
+        assert state.get("shadow_race_enabled") is True
+        assert state.get("is_running") is True, f"Simulation should be running automatically, got is_running={state.get('is_running')}"
+        assert state.get("shadow_rover") is not None
+        shadow = state["shadow_rover"]
+        
+        primary_x = state["rover"]["x"]
+        primary_y = state["rover"]["y"]
+        shadow_x = shadow["true_pos"][0]
+        shadow_y = shadow["true_pos"][1]
+
+        print(f"[OK] Mode C Primary Rover pos: ({primary_x:.2f}, {primary_y:.2f})")
+        print(f"[OK] Mode A Shadow Rover pos:  ({shadow_x:.2f}, {shadow_y:.2f}), Error: {shadow['localization_error']:.2f}m")
+
+        # Assert BOTH rovers actually moved away from origin (50.0, 50.0)
+        assert (primary_x != 50.0 or primary_y != 50.0), f"Primary rover did not move: ({primary_x}, {primary_y})"
+        assert (shadow_x != 50.0 or shadow_y != 50.0), f"Shadow rover did not move: ({shadow_x}, {shadow_y})"
+        print("[OK] Verified BOTH rovers are actively moving in real-time across the terrain!")
+
+        # Disable shadow race and reset
+        await ws.send(json.dumps({"action": "toggle_shadow_race", "enabled": False}))
+        print("[OK] Toggled Shadow Race OFF.")
+
     print("\n[SUCCESS] E2E WEBSOCKET & SIMULATION CONTROLS FULLY VERIFIED!")
 
 

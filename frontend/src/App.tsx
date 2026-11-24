@@ -10,6 +10,7 @@ import { TelemetryPanel } from './components/TelemetryPanel';
 import { RealtimeCharts } from './components/RealtimeCharts';
 import { BenchmarkModal } from './components/BenchmarkModal';
 import { DemoScenarioGuide } from './components/DemoScenarioGuide';
+import { Layers, Satellite, Terminal } from 'lucide-react';
 
 export function App() {
   const {
@@ -26,10 +27,14 @@ export function App() {
     restoreSatellite,
     injectHazard,
     runDemo,
+    toggleShadowRace,
     runBenchmark,
   } = useSimulation();
 
-  const [isBenchmarkModalOpen, setIsBenchmarkModalOpen] = useState(false);
+  const [isBenchmarkModalOpen, setIsBenchmarkModalOpen] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'GNC' | 'ORBITAL' | 'AI'>('GNC');
+  const [isDemoGuideVisible, setIsDemoGuideVisible] = useState<boolean>(true);
+  const [isHazardMode, setIsHazardMode] = useState<boolean>(false);
 
   const handleOpenBenchmark = () => {
     setIsBenchmarkModalOpen(true);
@@ -40,7 +45,6 @@ export function App() {
 
   const handleManualInjectHazard = () => {
     if (!state) return;
-    // Inject in front of rover along forward route
     const roverX = state.rover.x;
     const roverY = state.rover.y;
     const offset = 80;
@@ -49,102 +53,151 @@ export function App() {
     injectHazard(hzX, hzY, 28.0, 'ROCK_FIELD');
   };
 
+  const isDemoActive = Boolean(state?.demo_mission?.is_active);
+
   return (
-    <div className="min-h-screen w-full bg-space-950 flex flex-col font-sans text-slate-100 antialiased selection:bg-neon-cyan/20 selection:text-neon-cyan overflow-x-hidden">
-      {/* Top Header */}
+    <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#080A0D] text-[#E6EDF3] font-sans antialiased select-none">
+      {/* 1. Slim Aerospace Status Header (44px) */}
       <Header
         state={state}
         connected={connected}
         onOpenBenchmark={handleOpenBenchmark}
+        isDemoActive={isDemoActive}
+        onToggleDemoGuide={() => setIsDemoGuideVisible((v) => !v)}
+        onStartDemo={runDemo}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 w-full max-w-[1920px] mx-auto p-3 flex flex-col gap-3">
-        {/* Demo Mission HUD Milestone Tracker (if demo active) */}
-        {state?.demo_mission && (
-          <DemoScenarioGuide
-            demoStatus={state.demo_mission}
-            onStartDemo={runDemo}
-          />
-        )}
+      {/* 2. Main Cockpit Workspace */}
+      <div className="flex-1 min-h-0 flex flex-row overflow-hidden">
+        {/* Left/Center Tactical Workspace (~68% width) */}
+        <div className="flex-1 min-w-0 flex flex-col relative bg-[#080A0D]">
+          {/* Demo Scenario Milestone Strip (if active and visible) */}
+          {state?.demo_mission && isDemoActive && isDemoGuideVisible && (
+            <div className="shrink-0 z-20">
+              <DemoScenarioGuide
+                demoStatus={state.demo_mission}
+                onStartDemo={runDemo}
+                onClose={() => setIsDemoGuideVisible(false)}
+              />
+            </div>
+          )}
 
-        {/* Global Mission Controls Bar */}
-        <MissionControls
-          state={state}
-          onStart={startMission}
-          onPause={pauseMission}
-          onReset={resetMission}
-          onSpeed={setSpeed}
-          onMode={setMode}
-          onOutage={simulateOutage}
-          onRestore={restoreSatellite}
-          onInjectHazard={handleManualInjectHazard}
-          onRunDemo={runDemo}
-        />
-
-        {/* Central Tactical Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 min-h-[500px]">
-          {/* Main Visual Center: Interactive Mars Canvas */}
-          <div className="lg:col-span-8 flex flex-col min-h-[480px]">
+          {/* Full-Height Tactical Mars Canvas */}
+          <div className="flex-1 min-h-0 relative">
             <MarsCanvas
               state={state}
-              onInjectHazard={(x, y, rad, type) => injectHazard(x, y, rad, type)}
+              onInjectHazard={(x, y, rad, type) => {
+                injectHazard(x, y, rad, type);
+                setIsHazardMode(false);
+              }}
+              isHazardModeActive={isHazardMode}
+              onCancelHazardMode={() => setIsHazardMode(false)}
             />
+
+            {/* Sleek Minimal Floating Command Dock */}
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-[95%]">
+              <MissionControls
+                state={state}
+                onStart={startMission}
+                onPause={pauseMission}
+                onReset={resetMission}
+                onSpeed={setSpeed}
+                onMode={setMode}
+                onOutage={simulateOutage}
+                onRestore={restoreSatellite}
+                onToggleHazardMode={() => setIsHazardMode((h) => !h)}
+                isHazardModeActive={isHazardMode}
+                onToggleShadowRace={() => toggleShadowRace(!state?.shadow_race_enabled)}
+                onRunDemo={runDemo}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Right Inspector (~32% width, fixed min 380px) */}
+        <aside className="w-[380px] xl:w-[420px] shrink-0 border-l border-[#21262D] bg-[#0F1217] flex flex-col min-h-0 z-10">
+          {/* Tab Selector */}
+          <div className="h-9 border-b border-[#21262D] bg-[#161B22] flex items-center px-1 gap-1 shrink-0 font-mono text-[11px]">
+            <button
+              onClick={() => setActiveTab('GNC')}
+              className={`flex-1 h-7 rounded-[2px] font-semibold flex items-center justify-center gap-1.5 transition-colors duration-150 ${
+                activeTab === 'GNC'
+                  ? 'bg-[#0F1217] text-[#58A6FF] border border-[#21262D]'
+                  : 'text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#21262D]/40'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>GNC & EKF</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('ORBITAL')}
+              className={`flex-1 h-7 rounded-[2px] font-semibold flex items-center justify-center gap-1.5 transition-colors duration-150 ${
+                activeTab === 'ORBITAL'
+                  ? 'bg-[#0F1217] text-[#58A6FF] border border-[#21262D]'
+                  : 'text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#21262D]/40'
+              }`}
+            >
+              <Satellite className="w-3.5 h-3.5" />
+              <span>ORBITAL</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('AI')}
+              className={`flex-1 h-7 rounded-[2px] font-semibold flex items-center justify-center gap-1.5 transition-colors duration-150 ${
+                activeTab === 'AI'
+                  ? 'bg-[#0F1217] text-[#58A6FF] border border-[#21262D]'
+                  : 'text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#21262D]/40'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5" />
+              <span>AI & CHARTS</span>
+            </button>
           </div>
 
-          {/* Right Column: Satellite Constellation & Sensor Fusion */}
-          <div className="lg:col-span-4 flex flex-col gap-3">
-            {/* Satellite Constellation & AI Scheduler */}
-            <div className="flex-1 min-h-[260px]">
+          {/* Tab Content Pane */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+            {activeTab === 'GNC' && (
+              <>
+                <TelemetryPanel
+                  rover={state?.rover || null}
+                  metrics={state?.metrics || null}
+                />
+                <SensorFusionPanel
+                  ekf={state?.ekf || null}
+                  sensors={state?.sensors || null}
+                  metrics={state?.metrics || null}
+                  truePos={{
+                    x: state?.rover.x || 50,
+                    y: state?.rover.y || 50,
+                    speed: state?.rover.speed || 0,
+                    heading_deg: state?.rover.heading_deg || 0,
+                  }}
+                />
+              </>
+            )}
+
+            {activeTab === 'ORBITAL' && (
               <SatellitePanel
                 satellites={state?.satellites || []}
                 aiScheduler={state?.ai_scheduler || {}}
               />
-            </div>
+            )}
 
-            {/* Sensor Fusion & EKF */}
-            <div className="flex-1 min-h-[260px]">
-              <SensorFusionPanel
-                ekf={state?.ekf || null}
-                sensors={state?.sensors || null}
-                metrics={state?.metrics || null}
-                truePos={{
-                  x: state?.rover.x || 50,
-                  y: state?.rover.y || 50,
-                  speed: state?.rover.speed || 0,
-                  heading_deg: state?.rover.heading_deg || 0,
-                }}
-              />
-            </div>
+            {activeTab === 'AI' && (
+              <>
+                <AIDecisionConsole logs={state?.logs || []} />
+                <RealtimeCharts
+                  metrics={state?.metrics || null}
+                  simTime={state?.sim_time || 0}
+                />
+              </>
+            )}
           </div>
-        </div>
+        </aside>
+      </div>
 
-        {/* Lower Dashboard Row: Telemetry, AI Console, Live Graphs */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Telemetry Flight Stats */}
-          <div className="h-[260px]">
-            <TelemetryPanel
-              rover={state?.rover || null}
-              metrics={state?.metrics || null}
-            />
-          </div>
-
-          {/* AI Decision & Event Log */}
-          <div className="h-[260px]">
-            <AIDecisionConsole logs={state?.logs || []} />
-          </div>
-
-          {/* Real-time Streaming Performance Graphs */}
-          <div className="h-[260px]">
-            <RealtimeCharts
-              metrics={state?.metrics || null}
-              simTime={state?.sim_time || 0}
-            />
-          </div>
-        </div>
-      </main>
-
-      {/* Benchmark Modal (Mode A vs B vs C) */}
+      {/* Benchmark Head-to-Head Comparison Modal */}
       <BenchmarkModal
         isOpen={isBenchmarkModalOpen}
         onClose={() => setIsBenchmarkModalOpen(false)}

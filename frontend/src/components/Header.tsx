@@ -1,14 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Satellite, Radio, ShieldCheck, Activity, Compass, Cpu, AlertTriangle } from 'lucide-react';
+import { Radio, ShieldCheck, Activity, Compass, Cpu, AlertTriangle, PlayCircle, Bot, Swords } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
 
 interface HeaderProps {
   state: SimulationFullState | null;
   connected: boolean;
   onOpenBenchmark: () => void;
+  isDemoActive?: boolean;
+  onToggleDemoGuide?: () => void;
+  onStartDemo?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ state, connected, onOpenBenchmark }) => {
+export const Header: React.FC<HeaderProps> = ({
+  state,
+  connected,
+  onOpenBenchmark,
+  isDemoActive = false,
+  onToggleDemoGuide,
+  onStartDemo,
+}) => {
   const [utcTime, setUtcTime] = useState<string>('');
 
   useEffect(() => {
@@ -25,89 +35,127 @@ export const Header: React.FC<HeaderProps> = ({ state, connected, onOpenBenchmar
   const metSeconds = state ? Math.floor(state.sim_time % 60) : 0;
   const metString = `MET +${String(metMinutes).padStart(2, '0')}:${String(metSeconds).padStart(2, '0')}`;
 
-  const modeBadgeColor = {
-    MODE_A: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    MODE_B: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
-    MODE_C: 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/30 shadow-neon-cyan/20',
-  }[state?.active_mode || 'MODE_C'];
+  const currentMode = state?.active_mode || 'MODE_C';
 
   return (
-    <header className="w-full bg-space-900/90 border-b border-slate-800/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-4 select-none backdrop-blur-md">
-      {/* Brand & Subtitle */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 via-blue-600/20 to-purple-600/20 border border-neon-cyan/40 shadow-neon-cyan">
-          <Satellite className="w-5 h-5 text-neon-cyan animate-pulse-slow" />
-          <div className="absolute inset-0 rounded-xl border border-neon-cyan/20 animate-ping opacity-25" />
+    <header className="h-[44px] w-full bg-[#0F1217] border-b border-[#21262D] px-3 flex items-center justify-between gap-3 select-none shrink-0 z-30 font-mono">
+      {/* Brand & Subsystem Ident */}
+      <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-center w-7 h-7 bg-[#161B22] border border-[#58A6FF]/40 rounded-[2px]">
+          <span className="font-mono font-bold text-xs text-[#58A6FF]">NV</span>
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-mono text-lg font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-neon-cyan via-white to-blue-400">
-              NAVIS
-            </h1>
-            <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-              v2.4 SP
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400 font-medium tracking-tight">
-            Networked Adaptive Visual & Intelligent Space Navigation • <span className="text-neon-cyan font-mono text-[10px]">Adaptive Intelligence Beyond Earth</span>
-          </p>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm font-bold tracking-wider text-[#E6EDF3]">
+            NAVIS
+          </span>
+          <span className="text-[10px] text-[#8B949E] border border-[#21262D] bg-[#161B22] px-1.5 py-0.5 rounded-[2px]">
+            GNC-SYS v2.4
+          </span>
+          <span className="hidden lg:inline-block text-[11px] text-[#8B949E] tracking-tight">
+            / MARS AUTONOMOUS FLIGHT CONTROL
+          </span>
         </div>
       </div>
 
-      {/* Center Mission Status Banners */}
-      <div className="flex items-center gap-3">
-        {/* Active Mode */}
-        <div className={`badge-neon border px-3 py-1 ${modeBadgeColor}`}>
-          <Cpu className="w-3.5 h-3.5" />
-          <span className="font-bold text-xs">{state?.mode_meta.tag || 'ADAPTIVE AI'}</span>
+      {/* Center Status Indicators */}
+      <div className="flex items-center gap-2">
+        {/* Active Mode Pill */}
+        <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px] text-[11px]">
+          <span className="text-[10px] text-[#8B949E]">ARCH:</span>
+          <span
+            className={`font-bold ${
+              currentMode === 'MODE_C'
+                ? 'text-[#58A6FF]'
+                : currentMode === 'MODE_B'
+                ? 'text-[#E6EDF3]'
+                : 'text-[#D29922]'
+            }`}
+          >
+            {state?.mode_meta.tag || (currentMode === 'MODE_C' ? 'ADAPTIVE AI' : currentMode)}
+          </span>
         </div>
 
-        {/* Fallback Alarm Banner */}
+        {/* Autonomous Fallback Warning Flag */}
         {state?.ekf.fallback_active && (
-          <div className="badge-neon border border-neon-crimson/50 bg-neon-crimson/15 text-neon-crimson animate-pulse px-3 py-1">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#F85149]/15 border border-[#F85149] rounded-[2px] text-[11px] text-[#F85149] animate-pulse">
             <AlertTriangle className="w-3.5 h-3.5" />
-            <span className="font-bold text-xs">AUTONOMOUS FALLBACK</span>
+            <span className="font-bold">AUTONOMOUS FALLBACK</span>
           </div>
         )}
 
-        {/* Rover Mission Status */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg bg-space-850 border border-slate-800 font-mono text-xs text-slate-300">
-          <Compass className="w-3.5 h-3.5 text-neon-emerald" />
-          <span>STATUS:</span>
-          <span className="font-bold text-neon-emerald">
+        {/* Shadow Race Active Badge */}
+        {state?.shadow_race_enabled && (
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-[#F85149]/20 border border-[#F85149] rounded-[2px] text-[11px] text-[#F85149] font-bold">
+            <Swords className="w-3.5 h-3.5" />
+            <span>RACE: MODE A vs C</span>
+          </div>
+        )}
+
+        {/* Rover Physical Status */}
+        <div className="hidden xl:flex items-center gap-1.5 px-2 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px] text-[11px]">
+          <Compass className="w-3.5 h-3.5 text-[#2EA043]" />
+          <span className="text-[#8B949E]">STATUS:</span>
+          <span className="text-[#E6EDF3] font-semibold tabular-nums">
             {state?.rover.mission_status || 'INITIALIZING'}
           </span>
         </div>
       </div>
 
-      {/* Right Controls & Clocks */}
-      <div className="flex items-center gap-3">
-        {/* Mission Elapsed Time */}
-        <div className="bg-space-850 border border-slate-800 px-3 py-1 rounded-lg font-mono text-xs flex items-center gap-2">
-          <Activity className="w-3.5 h-3.5 text-neon-cyan" />
-          <span className="text-slate-400">MET:</span>
-          <span className="text-neon-cyan font-bold tracking-wider">{metString}</span>
+      {/* Right Action Trigger Buttons & Telemetry Clocks */}
+      <div className="flex items-center gap-2 text-xs">
+        {/* MET Clock */}
+        <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px]">
+          <Activity className="w-3.5 h-3.5 text-[#58A6FF]" />
+          <span className="text-[#8B949E] text-[10px]">MET:</span>
+          <span className="text-[#E6EDF3] font-semibold tabular-nums">{metString}</span>
         </div>
 
         {/* UTC Clock */}
-        <div className="hidden md:block bg-space-850 border border-slate-800 px-3 py-1 rounded-lg font-mono text-xs text-slate-400">
+        <div className="hidden md:block px-2 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px] text-[#8B949E] text-[11px] tabular-nums">
           {utcTime}
         </div>
 
-        {/* Benchmark Compare Button */}
+        {/* Prominent Demo Guide Trigger for Judges */}
+        {isDemoActive ? (
+          <button
+            onClick={onToggleDemoGuide}
+            className="btn-control bg-[#58A6FF]/15 border-[#58A6FF] text-[#58A6FF] font-semibold transition-colors duration-150"
+            title="Toggle Demo Mission Stage HUD"
+          >
+            <Bot className="w-3.5 h-3.5 animate-pulse" />
+            <span>DEMO HUD</span>
+          </button>
+        ) : onStartDemo ? (
+          <button
+            onClick={onStartDemo}
+            className="btn-control bg-[#161B22] border-[#58A6FF]/60 text-[#58A6FF] hover:bg-[#58A6FF]/15 font-semibold transition-colors duration-150"
+            title="Launch automated 15-stage demonstration mission for judges"
+          >
+            <Bot className="w-3.5 h-3.5" />
+            <span>GUIDED DEMO</span>
+          </button>
+        ) : null}
+
+        {/* Prominent Benchmark Modes Button for Judges */}
         <button
           onClick={onOpenBenchmark}
-          className="btn-aerospace bg-gradient-to-r from-purple-600/30 to-indigo-600/30 hover:from-purple-600/50 hover:to-indigo-600/50 text-purple-200 border border-purple-500/40 shadow-sm"
-          title="Run head-to-head evaluation benchmark across Mode A, Mode B, and Mode C"
+          className="btn-control bg-[#BC8CFF]/15 border-[#BC8CFF]/70 text-[#BC8CFF] hover:bg-[#BC8CFF]/25 font-semibold transition-colors duration-150"
+          title="Open head-to-head performance benchmark comparing Mode A, B, and C"
         >
-          <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+          <ShieldCheck className="w-3.5 h-3.5 text-[#BC8CFF]" />
           <span>COMPARE MODES</span>
         </button>
 
-        {/* WebSocket Connection Light */}
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-space-850 border border-slate-800 text-[11px] font-mono">
-          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-neon-emerald shadow-neon-emerald animate-pulse' : 'bg-neon-crimson'}`} />
-          <span className="text-slate-400">{connected ? 'LINK 20Hz' : 'DISCONNECTED'}</span>
+        {/* Telemetry Stream Heartbeat */}
+        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px] text-[11px]">
+          <span
+            className={`w-2 h-2 rounded-[1px] ${
+              connected ? 'bg-[#2EA043] animate-pulse' : 'bg-[#F85149]'
+            }`}
+          />
+          <span className="text-[#8B949E] text-[10px] tabular-nums">
+            {connected ? 'LINK 20Hz' : 'OFFLINE'}
+          </span>
         </div>
       </div>
     </header>
