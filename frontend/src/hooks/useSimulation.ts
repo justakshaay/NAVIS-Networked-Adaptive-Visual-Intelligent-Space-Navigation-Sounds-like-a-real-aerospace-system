@@ -29,8 +29,11 @@ export function useSimulation() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
-  // Dynamic API & WS Base Resolution
-  const apiBase = typeof window !== 'undefined' && window.location.port === '5173' ? 'http://127.0.0.1:8000' : '';
+  // Dynamic API & WS Base Resolution (supports separate Vercel frontend + Render backend via VITE_API_URL / VITE_WS_URL)
+  const apiBase = (
+    import.meta.env.VITE_API_URL ||
+    (typeof window !== 'undefined' && window.location.port === '5173' ? 'http://127.0.0.1:8000' : '')
+  ).replace(/\/$/, '');
 
   // Process incoming simulation snapshot
   const processNewSnapshot = useCallback((data: SimulationFullState) => {
@@ -130,9 +133,10 @@ export function useSimulation() {
   const connectWs = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl =
-      window.location.port === '5173'
+      import.meta.env.VITE_WS_URL ||
+      (window.location.port === '5173'
         ? `${protocol}//${window.location.hostname}:8000/ws/simulation`
-        : `${protocol}//${window.location.host}/ws/simulation`;
+        : `${protocol}//${window.location.host}/ws/simulation`);
 
     try {
       const ws = new WebSocket(wsUrl);
