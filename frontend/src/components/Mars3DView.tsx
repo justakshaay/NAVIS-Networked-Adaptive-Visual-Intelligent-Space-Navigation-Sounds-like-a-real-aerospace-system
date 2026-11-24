@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html, Line } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
-import { Camera, Eye, Radio, Compass, AlertOctagon, Wind, Layers, Maximize2 } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { SimulationFullState, SatelliteState, RoverState, SwarmRoverState } from '../types/simulation';
 import { HazardPalette, HazardType } from './HazardPalette';
 
@@ -117,9 +117,10 @@ const MartianTerrain: React.FC<TerrainMeshProps> = ({
       {/* Matte Martian Regolith Surface */}
       <mesh
         geometry={geometry}
+        castShadow
         receiveShadow
         onClick={(e) => {
-          if (!onTerrainClick || e.delta > 5) return;
+          if (!onTerrainClick || e.delta > 4) return;
           e.stopPropagation();
           const wx = Math.max(10, Math.min(width - 10, e.point.x));
           const wz = Math.max(10, Math.min(height - 10, e.point.z));
@@ -477,19 +478,32 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({
     return [rx, getElevation(rx, rz) + 1.2, rz];
   }, [state?.rover?.x, state?.rover?.y, getElevation]);
 
-  // Camera preset handler
+  const transitionRef = useRef<{
+    active: boolean;
+    pos: THREE.Vector3;
+    target: THREE.Vector3;
+  } | null>(null);
+
+  // Camera preset & smooth Reset View handler
   const setPreset = (mode: 'ORBITAL' | 'FOLLOW' | 'TOP_DOWN') => {
     setCameraMode(mode);
     const controls = controlsRef.current;
     if (!controls) return;
 
     if (mode === 'ORBITAL') {
-      controls.target.set(width / 2, 10, height / 2);
-      controls.object.position.set(width / 2, 420, height * 1.2);
+      transitionRef.current = {
+        active: true,
+        target: new THREE.Vector3(width / 2, 10, height / 2),
+        pos: new THREE.Vector3(width / 2, 420, height * 1.18),
+      };
     } else if (mode === 'TOP_DOWN') {
-      controls.target.set(width / 2, 0, height / 2);
-      controls.object.position.set(width / 2, 720, height / 2 + 1);
+      transitionRef.current = {
+        active: true,
+        target: new THREE.Vector3(width / 2, 0, height / 2),
+        pos: new THREE.Vector3(width / 2, 720, height / 2 + 1),
+      };
     } else if (mode === 'FOLLOW') {
+      transitionRef.current = null;
       const heading = state?.rover?.heading_rad || 0;
       // Aim slightly ahead & above the rover so the rover sits cleanly in the lower-center third
       controls.target.set(
@@ -505,11 +519,28 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({
     }
   };
 
-  // Follow camera tick
+  // Follow & Smooth Reset Camera Controller
   const CameraFollowController: React.FC = () => {
+    const { camera } = useThree();
     useFrame(() => {
-      if (cameraMode === 'FOLLOW' && controlsRef.current && state) {
-        const controls = controlsRef.current;
+      const controls = controlsRef.current;
+      if (!controls) return;
+
+      if (transitionRef.current?.active) {
+        camera.position.lerp(transitionRef.current.pos, 0.14);
+        controls.target.lerp(transitionRef.current.target, 0.14);
+        if (
+          camera.position.distanceTo(transitionRef.current.pos) < 1.5 &&
+          controls.target.distanceTo(transitionRef.current.target) < 1.0
+        ) {
+          camera.position.copy(transitionRef.current.pos);
+          controls.target.copy(transitionRef.current.target);
+          transitionRef.current.active = false;
+        }
+        return;
+      }
+
+      if (cameraMode === 'FOLLOW' && state) {
         const heading = state?.rover?.heading_rad || 0;
         controls.target.lerp(
           new THREE.Vector3(
@@ -562,43 +593,62 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({
     >
       {/* 3D Canvas Viewport */}
       <Canvas
-        camera={{ position: [width / 2, 420, height * 1.2], fov: 45, near: 1, far: 4000 }}
+        camera={{ position: [width / 2, 420, height * 1.18], fov: 45, near: 1, far: 4000 }}
         shadows
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        gl={{
+          antialias: true,
+          powerPreference: 'high-performance',
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.1,
+        }}
       >
-        <color attach="background" args={['#080A0D']} />
+        <color attach="background" args={['#09090B']} />
 
-        {/* Aerospace Deep Space Ambient & Directional Sun Lighting */}
-        <ambientLight intensity={0.65} color="#1E232B" />
+        {/* 3-Point + Hemisphere Martian Lighting Rig */}
+        <hemisphereLight args={['#c9d6e8', '#6b4432', 0.8]} />
         <directionalLight
-          position={[450, 360, 180]}
-          intensity={1.3}
-          color="#FFE9D8"
+          position={[width * 0.9, 440, height * 0.35]}
+          intensity={2.4}
+          color="#fff0dd"
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
           shadow-camera-near={10}
-          shadow-camera-far={1200}
-          shadow-camera-left={-width}
-          shadow-camera-right={width}
-          shadow-camera-top={height}
-          shadow-camera-bottom={-height}
+          shadow-camera-far={1600}
+          shadow-camera-left={-700}
+          shadow-camera-right={700}
+          shadow-camera-top={700}
+          shadow-camera-bottom={-700}
+          shadow-bias={-0.0005}
         />
-        <directionalLight position={[-200, 150, -200]} intensity={0.25} color="#3B82F6" />
+        <directionalLight position={[-220, 200, -180]} intensity={0.6} color="#a8c4ff" />
 
         {/* Starfield */}
         <Stars radius={1200} depth={200} count={3500} factor={4} saturation={0} fade speed={0.5} />
 
         <CameraFollowController />
 
-        {/* Orbit Controls with Damping */}
+        {/* Free-Orbit Full-Map OrbitControls */}
         <OrbitControls
           ref={controlsRef}
+          target={[width / 2, 10, height / 2]}
+          enableRotate
+          enableZoom
+          enablePan
+          screenSpacePanning={false}
           enableDamping
-          dampingFactor={0.06}
-          maxPolarAngle={Math.PI / 2 - 0.04}
-          minDistance={20}
-          maxDistance={1800}
+          dampingFactor={0.07}
+          minAzimuthAngle={-Infinity}
+          maxAzimuthAngle={Infinity}
+          minPolarAngle={0.12}
+          maxPolarAngle={Math.PI / 2 - 0.06}
+          minDistance={25}
+          maxDistance={1600}
+          onStart={() => {
+            if (transitionRef.current) {
+              transitionRef.current.active = false;
+            }
+          }}
         />
 
         {/* 1. Martian Displaced Terrain Surface */}
@@ -867,6 +917,15 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({
           title="Nadir 90-degree view"
         >
           Nadir
+        </button>
+        <div className="w-px h-4 bg-[#222226] mx-0.5" />
+        <button
+          onClick={() => setPreset('ORBITAL')}
+          className="px-2 py-1 rounded-[4px] font-medium text-[#A1A1AA] hover:text-[#F4F4F5] hover:bg-[#141417] flex items-center gap-1 transition-colors"
+          title="Smoothly reset camera to centered full-map overview"
+        >
+          <RotateCcw className="w-3 h-3" />
+          <span>Reset View</span>
         </button>
       </div>
 
