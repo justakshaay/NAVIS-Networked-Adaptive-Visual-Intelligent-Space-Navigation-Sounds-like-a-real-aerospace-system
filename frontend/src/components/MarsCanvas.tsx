@@ -100,11 +100,68 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
   const terrainVersion = state?.terrain_summary?.terrain_version ?? 1;
   const elevationGrid = state?.terrain_summary?.elevation_grid;
 
-  // Cached offscreen terrain elevation & contour layer (invalidates on terrain_preset / terrain_version / layerContours)
+  // Sample elevation (m) & terrain slope (deg) via bilinear interpolation on DEM grid
+  const sampleElevationAndSlope = (
+    grid: number[][] | undefined,
+    wx: number,
+    wy: number,
+    wWidth = 600,
+    wHeight = 600
+  ): { elev: number; slopeDeg: number } | null => {
+    if (!grid || grid.length < 2 || !grid[0] || grid[0].length < 2) return null;
+    const rows = grid.length;
+    const cols = grid[0].length;
+    const sampleGrid = (gx: number, gy: number): number => {
+      const cx = Math.max(0, Math.min(cols - 1, gx));
+      const cy = Math.max(0, Math.min(rows - 1, gy));
+      const x0 = Math.floor(cx);
+      const y0 = Math.floor(cy);
+      const x1 = Math.min(cols - 1, x0 + 1);
+      const y1 = Math.min(rows - 1, y0 + 1);
+      const tx = cx - x0;
+      const ty = cy - y0;
+      const v00 = grid[y0][x0];
+      const v10 = grid[y0][x1];
+      const v01 = grid[y1][x0];
+      const v11 = grid[y1][x1];
+      return (v00 * (1 - tx) + v10 * tx) * (1 - ty) + (v01 * (1 - tx) + v11 * tx) * ty;
+    };
+
+    const gx = (wx / Math.max(1, wWidth)) * (cols - 1);
+    const gy = (wy / Math.max(1, wHeight)) * (rows - 1);
+    const elev = sampleGrid(gx, gy);
+
+    const step = 0.5;
+    const gxL = Math.max(0, gx - step);
+    const gxR = Math.min(cols - 1, gx + step);
+    const gyU = Math.max(0, gy - step);
+    const gyD = Math.min(rows - 1, gy + step);
+    const dxMeters = Math.max(0.5, ((gxR - gxL) / Math.max(1, cols - 1)) * wWidth);
+    const dyMeters = Math.max(0.5, ((gyD - gyU) / Math.max(1, rows - 1)) * wHeight);
+    const dzdx = (sampleGrid(gxR, gy) - sampleGrid(gxL, gy)) / dxMeters;
+    const dzdy = (sampleGrid(gx, gyD) - sampleGrid(gx, gyU)) / dyMeters;
+    const slopeDeg = Math.atan(Math.hypot(dzdx, dzdy)) * (180 / Math.PI);
+    return { elev, slopeDeg };
+  };
+
+  const hoverTelemetry = useMemo(() => {
+    if (!hoverCoord) return null;
+    const worldW = state?.terrain_summary?.width_m || 600;
+    const worldH = state?.terrain_summary?.height_m || 600;
+    const sampled = sampleElevationAndSlope(elevationGrid, hoverCoord.x, hoverCoord.y, worldW, worldH);
+    return {
+      x: hoverCoord.x,
+      y: hoverCoord.y,
+      elev: sampled ? sampled.elev : null,
+      slopeDeg: sampled ? sampled.slopeDeg : null,
+    };
+  }, [hoverCoord, elevationGrid, state?.terrain_summary?.width_m, state?.terrain_summary?.height_m]);
+
+  // Cached offscreen terrain hillshade + iso-elevation contour layer (invalidates on preset / seed / contours toggle)
   const terrainLayerCanvas = useMemo(() => {
     if (typeof document === 'undefined') return null;
     const offscreen = document.createElement('canvas');
-    const size = 300;
+    const size = 320;
     offscreen.width = size;
     offscreen.height = size;
     const octx = offscreen.getContext('2d');
@@ -112,8 +169,7 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
 
     const isJezero = terrainPreset === 'jezero_crater';
 
-    // Render elevation grid into smooth offscreen heatmap
-    if (elevationGrid && elevationGrid.length > 1) {
+    if (elevationGrid && elevationGrid.length > 1 && elevationGrid[0]?.length > 1) {
       const rows = elevationGrid.length;
       const cols = elevationGrid[0].length;
       let minE = Infinity;
@@ -127,145 +183,198 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       }
       const range = Math.max(1, maxE - minE);
 
-      const small = document.createElement('canvas');
-      small.width = cols;
-      small.height = rows;
-      const sctx = small.getContext('2d');
-      if (sctx) {
-        const img = sctx.createImageData(cols, rows);
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const norm = Math.max(0, Math.min(1, (elevationGrid[r][c] - minE) / range));
-            let red = 18;
-            let green = 14;
-            let blue = 13;
-            if (isJezero) {
-              // Jezero Crater: Deep slate-basalt lakebed -> amber-ochre delta -> rust-ochre crater rim
-              if (norm < 0.35) {
-                const t = norm / 0.35;
-                red = Math.round(11 + t * 14);
-                green = Math.round(16 + t * 14);
-                blue = Math.round(22 + t * 10);
-              } else if (norm < 0.68) {
-                const t = (norm - 0.35) / 0.33;
-                red = Math.round(25 + t * 38);
-                green = Math.round(30 + t * 15);
-                blue = Math.round(32 - t * 8);
-              } else {
-                const t = (norm - 0.68) / 0.32;
-                red = Math.round(63 + t * 36);
-                green = Math.round(45 + t * 16);
-                blue = Math.round(24 + t * 10);
-              }
+      const sampleDem = (u: number, v: number): number => {
+        const cx = Math.max(0, Math.min(cols - 1, u * (cols - 1)));
+        const cy = Math.max(0, Math.min(rows - 1, v * (rows - 1)));
+        const x0 = Math.floor(cx);
+        const y0 = Math.floor(cy);
+        const x1 = Math.min(cols - 1, x0 + 1);
+        const y1 = Math.min(rows - 1, y0 + 1);
+        const tx = cx - x0;
+        const ty = cy - y0;
+        return (
+          (elevationGrid[y0][x0] * (1 - tx) + elevationGrid[y0][x1] * tx) * (1 - ty) +
+          (elevationGrid[y1][x0] * (1 - tx) + elevationGrid[y1][x1] * tx) * ty
+        );
+      };
+
+      // Directional hillshading light vector (NW sun azimuth)
+      const lx = -0.62;
+      const ly = -0.56;
+      const lz = 0.55;
+      const metersPerPx = 600 / size;
+      const reliefExaggeration = 2.6;
+
+      const img = octx.createImageData(size, size);
+      const eps = 1 / size;
+
+      for (let py = 0; py < size; py++) {
+        const vCoord = py / (size - 1);
+        const vU = Math.max(0, vCoord - eps);
+        const vD = Math.min(1, vCoord + eps);
+        for (let px = 0; px < size; px++) {
+          const uCoord = px / (size - 1);
+          const uL = Math.max(0, uCoord - eps);
+          const uR = Math.min(1, uCoord + eps);
+
+          const elev = sampleDem(uCoord, vCoord);
+          const norm = Math.max(0, Math.min(1, (elev - minE) / range));
+
+          // Surface normal via central differences for crisp slope shading
+          const dzdx = ((sampleDem(uR, vCoord) - sampleDem(uL, vCoord)) / (2 * metersPerPx)) * reliefExaggeration;
+          const dzdy = ((sampleDem(uCoord, vD) - sampleDem(uCoord, vU)) / (2 * metersPerPx)) * reliefExaggeration;
+          const invLen = 1 / Math.hypot(-dzdx, -dzdy, 1);
+          const shadeDot = Math.max(0, (-dzdx * lx + -dzdy * ly + lz) * invLen);
+          const hillshade = 0.62 + shadeDot * 0.62; // range ~[0.62, 1.24]
+
+          let red = 18;
+          let green = 14;
+          let blue = 13;
+          if (isJezero) {
+            // Jezero Crater: Deep slate-basalt lakebed -> ochre delta -> warm regolith rim
+            if (norm < 0.35) {
+              const t = norm / 0.35;
+              red = 12 + t * 15;
+              green = 16 + t * 14;
+              blue = 22 + t * 9;
+            } else if (norm < 0.68) {
+              const t = (norm - 0.35) / 0.33;
+              red = 27 + t * 38;
+              green = 30 + t * 16;
+              blue = 31 - t * 8;
             } else {
-              // Procedural: Matte obsidian-rust basalt
-              if (norm < 0.5) {
-                const t = norm / 0.5;
-                red = Math.round(14 + t * 18);
-                green = Math.round(11 + t * 12);
-                blue = Math.round(10 + t * 10);
-              } else {
-                const t = (norm - 0.5) / 0.5;
-                red = Math.round(32 + t * 20);
-                green = Math.round(23 + t * 11);
-                blue = Math.round(20 + t * 8);
-              }
+              const t = (norm - 0.68) / 0.32;
+              red = 65 + t * 38;
+              green = 46 + t * 18;
+              blue = 23 + t * 10;
             }
-            const idx = (r * cols + c) * 4;
-            img.data[idx] = red;
-            img.data[idx + 1] = green;
-            img.data[idx + 2] = blue;
-            img.data[idx + 3] = 255;
+          } else {
+            // Procedural terrain: Matte volcanic basalt -> rust highlands
+            if (norm < 0.5) {
+              const t = norm / 0.5;
+              red = 14 + t * 20;
+              green = 11 + t * 13;
+              blue = 11 + t * 9;
+            } else {
+              const t = (norm - 0.5) / 0.5;
+              red = 34 + t * 28;
+              green = 24 + t * 15;
+              blue = 20 + t * 10;
+            }
+          }
+
+          const idx = (py * size + px) * 4;
+          img.data[idx] = Math.min(255, Math.max(0, Math.round(red * hillshade)));
+          img.data[idx + 1] = Math.min(255, Math.max(0, Math.round(green * hillshade)));
+          img.data[idx + 2] = Math.min(255, Math.max(0, Math.round(blue * hillshade)));
+          img.data[idx + 3] = 255;
+        }
+      }
+      octx.putImageData(img, 0, 0);
+
+      // Iso-elevation contour lines via marching squares directly from DEM
+      if (layerContours) {
+        const res = 110;
+        const field = new Float32Array((res + 1) * (res + 1));
+        for (let gy = 0; gy <= res; gy++) {
+          const vc = gy / res;
+          for (let gx = 0; gx <= res; gx++) {
+            field[gy * (res + 1) + gx] = sampleDem(gx / res, vc);
           }
         }
-        sctx.putImageData(img, 0, 0);
-        octx.imageSmoothingEnabled = true;
-        octx.imageSmoothingQuality = 'high';
-        octx.drawImage(small, 0, 0, size, size);
+
+        const levels = 11;
+        const stepPx = size / res;
+        const interp = (a: number, b: number, level: number): number => {
+          const denom = b - a;
+          if (Math.abs(denom) < 1e-5) return 0.5;
+          return Math.max(0, Math.min(1, (level - a) / denom));
+        };
+
+        for (let l = 1; l < levels; l++) {
+          const level = minE + (range * l) / levels;
+          const isIndexContour = l % 3 === 0;
+          octx.strokeStyle = isIndexContour
+            ? isJezero
+              ? 'rgba(229, 169, 60, 0.28)'
+              : 'rgba(210, 153, 34, 0.22)'
+            : isJezero
+              ? 'rgba(210, 153, 34, 0.12)'
+              : 'rgba(180, 130, 90, 0.11)';
+          octx.lineWidth = isIndexContour ? 1.1 : 0.7;
+          octx.beginPath();
+
+          for (let gy = 0; gy < res; gy++) {
+            for (let gx = 0; gx < res; gx++) {
+              const v0 = field[gy * (res + 1) + gx];
+              const v1 = field[gy * (res + 1) + gx + 1];
+              const v2 = field[(gy + 1) * (res + 1) + gx + 1];
+              const v3 = field[(gy + 1) * (res + 1) + gx];
+              const mask =
+                (v0 >= level ? 8 : 0) |
+                (v1 >= level ? 4 : 0) |
+                (v2 >= level ? 2 : 0) |
+                (v3 >= level ? 1 : 0);
+              if (mask === 0 || mask === 15) continue;
+
+              const x = gx * stepPx;
+              const y = gy * stepPx;
+              const top = [x + interp(v0, v1, level) * stepPx, y];
+              const right = [x + stepPx, y + interp(v1, v2, level) * stepPx];
+              const bottom = [x + interp(v3, v2, level) * stepPx, y + stepPx];
+              const left = [x, y + interp(v0, v3, level) * stepPx];
+
+              const seg = (pA: number[], pB: number[]) => {
+                octx.moveTo(pA[0], pA[1]);
+                octx.lineTo(pB[0], pB[1]);
+              };
+
+              switch (mask) {
+                case 1:
+                case 14:
+                  seg(left, bottom);
+                  break;
+                case 2:
+                case 13:
+                  seg(bottom, right);
+                  break;
+                case 3:
+                case 12:
+                  seg(left, right);
+                  break;
+                case 4:
+                case 11:
+                  seg(top, right);
+                  break;
+                case 5:
+                  seg(left, top);
+                  seg(bottom, right);
+                  break;
+                case 6:
+                case 9:
+                  seg(top, bottom);
+                  break;
+                case 7:
+                case 8:
+                  seg(left, top);
+                  break;
+                case 10:
+                  seg(top, right);
+                  seg(left, bottom);
+                  break;
+              }
+            }
+          }
+          octx.stroke();
+        }
       }
     } else {
       octx.fillStyle = isJezero ? '#10161C' : '#120E0D';
       octx.fillRect(0, 0, size, size);
     }
 
-    // Distinct Topographic Contours per preset
-    if (layerContours) {
-      const scalePt = size / 600;
-      if (isJezero) {
-        // 1. Raised Western Crater Rim Ridge contours (X < 140m)
-        octx.strokeStyle = 'rgba(210, 153, 34, 0.24)';
-        octx.lineWidth = 1.2;
-        for (const xRim of [35, 65, 95, 125]) {
-          octx.beginPath();
-          octx.moveTo(xRim * scalePt, 0);
-          octx.bezierCurveTo(
-            (xRim + 14) * scalePt, size * 0.3,
-            (xRim - 10) * scalePt, size * 0.7,
-            (xRim + 8) * scalePt, size
-          );
-          octx.stroke();
-        }
-
-        // 2. Branching River-Delta Escarpment Fan (X = 80..310m)
-        octx.strokeStyle = 'rgba(245, 158, 11, 0.28)';
-        octx.lineWidth = 1.1;
-        for (const fanR of [70, 115, 160, 205, 240]) {
-          octx.beginPath();
-          octx.arc(75 * scalePt, 255 * scalePt, fanR * scalePt, -0.62, 0.72);
-          octx.stroke();
-        }
-
-        // 3. Paleochannel distributary lines across delta
-        octx.strokeStyle = 'rgba(88, 166, 255, 0.12)';
-        octx.setLineDash([4, 4]);
-        octx.beginPath();
-        octx.moveTo(75 * scalePt, 255 * scalePt);
-        octx.quadraticCurveTo(190 * scalePt, 235 * scalePt, 305 * scalePt, 195 * scalePt);
-        octx.moveTo(75 * scalePt, 255 * scalePt);
-        octx.quadraticCurveTo(200 * scalePt, 275 * scalePt, 310 * scalePt, 315 * scalePt);
-        octx.moveTo(75 * scalePt, 255 * scalePt);
-        octx.quadraticCurveTo(175 * scalePt, 310 * scalePt, 265 * scalePt, 365 * scalePt);
-        octx.stroke();
-        octx.setLineDash([]);
-
-        // 4. Ancient Lakebed Basin subtle contours (X > 320m)
-        octx.strokeStyle = 'rgba(139, 148, 158, 0.14)';
-        octx.lineWidth = 0.8;
-        for (const rad of [60, 110, 160]) {
-          octx.beginPath();
-          octx.ellipse(455 * scalePt, 310 * scalePt, rad * scalePt, rad * 0.8 * scalePt, 0.2, 0, Math.PI * 2);
-          octx.stroke();
-        }
-      } else {
-        // Procedural sector contour rings
-        octx.strokeStyle = '#2A1F1B';
-        octx.lineWidth = 0.8;
-        const centerDips = [
-          { x: 180, y: 160, r: 120 },
-          { x: 380, y: 320, r: 160 },
-          { x: 490, y: 180, r: 90 },
-          { x: 250, y: 440, r: 130 },
-        ];
-        for (const ridge of centerDips) {
-          for (let rStep = 30; rStep < ridge.r; rStep += 35) {
-            octx.beginPath();
-            octx.ellipse(
-              ridge.x * scalePt,
-              ridge.y * scalePt,
-              rStep * scalePt,
-              rStep * 0.75 * scalePt,
-              Math.PI / 6,
-              0,
-              Math.PI * 2
-            );
-            octx.stroke();
-          }
-        }
-      }
-    }
-
     return offscreen;
-  }, [terrainPreset, terrainVersion, elevationGrid?.length, layerContours]);
+  }, [terrainPreset, terrainVersion, elevationGrid?.length, elevationGrid?.[0]?.[0], layerContours]);
 
   // Main Canvas Rendering Loop
   useEffect(() => {
@@ -343,28 +452,60 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     }
     ctx.restore();
 
-    // Fine Coordinate Gridlines (every 50 meters)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-    ctx.lineWidth = 1;
-    for (let gx = 0; gx <= worldW; gx += 50) {
+    // Tactical Coordinate Grid: 50m minor + 100m major lines with crisp border ticks
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+    ctx.lineWidth = 0.8;
+    for (let gx = 50; gx < worldW; gx += 100) {
       ctx.beginPath();
       ctx.moveTo(toCanvasX(gx), toCanvasY(0));
       ctx.lineTo(toCanvasX(gx), toCanvasY(worldH));
       ctx.stroke();
     }
-    for (let gy = 0; gy <= worldH; gy += 50) {
+    for (let gy = 50; gy < worldH; gy += 100) {
       ctx.beginPath();
       ctx.moveTo(toCanvasX(0), toCanvasY(gy));
       ctx.lineTo(toCanvasX(worldW), toCanvasY(gy));
       ctx.stroke();
     }
 
-    // Grid Coordinates Reference Marks
-    ctx.fillStyle = '#6E7681';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 1;
+    for (let gx = 100; gx < worldW; gx += 100) {
+      ctx.beginPath();
+      ctx.moveTo(toCanvasX(gx), toCanvasY(0));
+      ctx.lineTo(toCanvasX(gx), toCanvasY(worldH));
+      ctx.stroke();
+    }
+    for (let gy = 100; gy < worldH; gy += 100) {
+      ctx.beginPath();
+      ctx.moveTo(toCanvasX(0), toCanvasY(gy));
+      ctx.lineTo(toCanvasX(worldW), toCanvasY(gy));
+      ctx.stroke();
+    }
+
+    // World Boundary Frame & Edge Coordinate Ticks
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(toCanvasX(0), toCanvasY(0), worldW * scale, worldH * scale);
+
+    ctx.fillStyle = 'rgba(161, 161, 170, 0.65)';
     ctx.font = '8px "JetBrains Mono", monospace';
     ctx.textAlign = 'left';
     for (let gx = 100; gx < worldW; gx += 100) {
-      ctx.fillText(`${gx}m`, toCanvasX(gx) + 3, toCanvasY(12));
+      const cx = toCanvasX(gx);
+      ctx.beginPath();
+      ctx.moveTo(cx, toCanvasY(0));
+      ctx.lineTo(cx, toCanvasY(0) + 5);
+      ctx.stroke();
+      ctx.fillText(`${gx}`, cx + 3, toCanvasY(0) + 10);
+    }
+    for (let gy = 100; gy < worldH; gy += 100) {
+      const cy = toCanvasY(gy);
+      ctx.beginPath();
+      ctx.moveTo(toCanvasX(0), cy);
+      ctx.lineTo(toCanvasX(0) + 5, cy);
+      ctx.stroke();
+      ctx.fillText(`${gy}`, toCanvasX(0) + 7, cy + 3);
     }
 
     // 2. Natural Rock Fields
@@ -438,51 +579,75 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
         const hzType = hz.type || 'ROCK_FIELD';
 
         if (hzType === 'CRATER') {
-          // Dark concentric ringed depression
-          const crGrad = ctx.createRadialGradient(hx, hy, hrad * 0.1, hx, hy, hrad);
-          crGrad.addColorStop(0, '#040405');
-          crGrad.addColorStop(0.65, 'rgba(18, 14, 14, 0.92)');
-          crGrad.addColorStop(1, 'rgba(82, 82, 91, 0.25)');
-          ctx.fillStyle = crGrad;
+          // Shaded outer rim + darker recessed inner basin ring
+          const rimGrad = ctx.createRadialGradient(
+            hx - hrad * 0.18,
+            hy - hrad * 0.18,
+            hrad * 0.2,
+            hx,
+            hy,
+            hrad * 1.05
+          );
+          rimGrad.addColorStop(0, '#050507');
+          rimGrad.addColorStop(0.58, 'rgba(14, 14, 18, 0.94)');
+          rimGrad.addColorStop(0.84, 'rgba(92, 92, 102, 0.42)');
+          rimGrad.addColorStop(1, 'rgba(63, 63, 70, 0)');
+          ctx.fillStyle = rimGrad;
           ctx.beginPath();
           ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
           ctx.fill();
 
-          ctx.strokeStyle = '#71717A';
-          ctx.lineWidth = 1.5;
+          // Outer crater rim highlight arc (NW lit) & shadow arc (SE)
+          ctx.strokeStyle = 'rgba(161, 161, 170, 0.65)';
+          ctx.lineWidth = 1.6;
           ctx.beginPath();
-          ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
+          ctx.arc(hx, hy, hrad * 0.96, Math.PI * 0.85, Math.PI * 1.85);
           ctx.stroke();
 
-          ctx.strokeStyle = 'rgba(248, 81, 73, 0.45)';
-          ctx.setLineDash([2, 3]);
+          ctx.strokeStyle = 'rgba(24, 24, 27, 0.9)';
+          ctx.lineWidth = 1.8;
           ctx.beginPath();
-          ctx.arc(hx, hy, hrad * 0.65, 0, Math.PI * 2);
+          ctx.arc(hx, hy, hrad * 0.96, -Math.PI * 0.15, Math.PI * 0.85);
+          ctx.stroke();
+
+          // Recessed inner basin ring + caution ring
+          ctx.strokeStyle = 'rgba(248, 81, 73, 0.48)';
+          ctx.lineWidth = 1.1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.arc(hx, hy, hrad * 0.56, 0, Math.PI * 2);
           ctx.stroke();
 
           ctx.fillStyle = '#E4E4E7';
-          ctx.font = '9px "JetBrains Mono", monospace';
+          ctx.font = '8px "JetBrains Mono", monospace';
           ctx.textAlign = 'center';
-          ctx.fillText('! CRATER', hx, hy - hrad - 4);
+          ctx.fillText('! CRATER', hx, hy - hrad - 5);
         } else if (hzType === 'SAND_TRAP') {
-          // Amber/ochre stippled soft regolith hazard zone
+          // Warm amber dashed perimeter + parallel dune ripple lines clipped inside
           const sandGrad = ctx.createRadialGradient(hx, hy, 2, hx, hy, hrad);
-          sandGrad.addColorStop(0, 'rgba(217, 119, 6, 0.34)');
-          sandGrad.addColorStop(0.75, 'rgba(217, 119, 6, 0.15)');
+          sandGrad.addColorStop(0, 'rgba(217, 119, 6, 0.28)');
+          sandGrad.addColorStop(0.8, 'rgba(217, 119, 6, 0.12)');
           sandGrad.addColorStop(1, 'rgba(217, 119, 6, 0)');
           ctx.fillStyle = sandGrad;
           ctx.beginPath();
           ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
           ctx.fill();
 
-          ctx.fillStyle = 'rgba(245, 158, 11, 0.55)';
-          for (let i = 0; i < 8; i++) {
-            const ang = (i * Math.PI) / 4;
-            const rr = hrad * (0.35 + (i % 2) * 0.3);
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(hx, hy, hrad * 0.88, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.48)';
+          ctx.lineWidth = 1.1;
+          const rippleSpacing = Math.max(4, hrad * 0.28);
+          for (let dy = -hrad * 0.72; dy <= hrad * 0.72; dy += rippleSpacing) {
             ctx.beginPath();
-            ctx.arc(hx + Math.cos(ang) * rr, hy + Math.sin(ang) * rr, 1.5, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.moveTo(hx - hrad, hy + dy);
+            ctx.quadraticCurveTo(hx - hrad * 0.35, hy + dy - rippleSpacing * 0.35, hx, hy + dy);
+            ctx.quadraticCurveTo(hx + hrad * 0.35, hy + dy + rippleSpacing * 0.35, hx + hrad, hy + dy);
+            ctx.stroke();
           }
+          ctx.restore();
 
           ctx.strokeStyle = '#F59E0B';
           ctx.lineWidth = 1.4;
@@ -492,40 +657,60 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
           ctx.stroke();
 
           ctx.fillStyle = '#F59E0B';
-          ctx.font = '9px "JetBrains Mono", monospace';
+          ctx.font = '8px "JetBrains Mono", monospace';
           ctx.textAlign = 'center';
-          ctx.fillText('! SAND_TRAP', hx, hy - hrad - 4);
+          ctx.fillText('! SAND TRAP', hx, hy - hrad - 5);
         } else {
-          // ROCK_FIELD: Red dashed boundary + boulder cluster
+          // ROCK_FIELD: Subtle caution fill + clustered angular rock silhouettes
           const hzGrad = ctx.createRadialGradient(hx, hy, 2, hx, hy, hrad);
-          hzGrad.addColorStop(0, 'rgba(248, 81, 73, 0.32)');
-          hzGrad.addColorStop(0.7, 'rgba(248, 81, 73, 0.12)');
+          hzGrad.addColorStop(0, 'rgba(248, 81, 73, 0.24)');
+          hzGrad.addColorStop(0.75, 'rgba(248, 81, 73, 0.08)');
           hzGrad.addColorStop(1, 'rgba(248, 81, 73, 0)');
           ctx.fillStyle = hzGrad;
           ctx.beginPath();
           ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
           ctx.fill();
 
-          ctx.fillStyle = '#DC2626';
-          for (let i = 0; i < 5; i++) {
-            const ang = (i * Math.PI * 2) / 5;
-            const rr = hrad * 0.42;
+          const rockOffsets = [
+            { dx: -0.32, dy: -0.22, s: 0.24, rot: 0.2 },
+            { dx: 0.28, dy: -0.26, s: 0.2, rot: 1.1 },
+            { dx: 0.04, dy: 0.06, s: 0.27, rot: 2.3 },
+            { dx: -0.3, dy: 0.3, s: 0.19, rot: 0.7 },
+            { dx: 0.34, dy: 0.24, s: 0.22, rot: 1.8 },
+          ];
+          for (const rk of rockOffsets) {
+            const rxp = hx + rk.dx * hrad;
+            const ryp = hy + rk.dy * hrad;
+            const rs = Math.max(3, rk.s * hrad);
             ctx.beginPath();
-            ctx.arc(hx + Math.cos(ang) * rr, hy + Math.sin(ang) * rr, 2.3, 0, Math.PI * 2);
+            const verts = 5;
+            for (let v = 0; v < verts; v++) {
+              const a = rk.rot + (v * Math.PI * 2) / verts;
+              const rMult = v % 2 === 0 ? 1.0 : 0.72;
+              const vx = rxp + Math.cos(a) * rs * rMult;
+              const vy = ryp + Math.sin(a) * rs * rMult;
+              if (v === 0) ctx.moveTo(vx, vy);
+              else ctx.lineTo(vx, vy);
+            }
+            ctx.closePath();
+            ctx.fillStyle = '#451A1A';
             ctx.fill();
+            ctx.strokeStyle = 'rgba(248, 113, 113, 0.85)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
           }
 
-          ctx.strokeStyle = '#F85149';
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = 'rgba(248, 81, 73, 0.78)';
+          ctx.lineWidth = 1.3;
+          ctx.setLineDash([4, 3]);
           ctx.beginPath();
           ctx.arc(hx, hy, hrad, 0, Math.PI * 2);
           ctx.stroke();
 
           ctx.fillStyle = '#F85149';
-          ctx.font = '9px "JetBrains Mono", monospace';
+          ctx.font = '8px "JetBrains Mono", monospace';
           ctx.textAlign = 'center';
-          ctx.fillText(`! ${hzType}`, hx, hy - hrad - 4);
+          ctx.fillText(`! ${hzType}`, hx, hy - hrad - 5);
         }
         ctx.restore();
       }
@@ -598,32 +783,48 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     ctx.fillText('ORIGIN', sx, sy + 16);
     ctx.restore();
 
-    // Target (Nominal Reticle)
+    // Target (Animated Aerospace Reticle with Dynamic Coordinates)
     ctx.save();
     const tx = toCanvasX(targetPos[0]);
     const ty = toCanvasY(targetPos[1]);
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.0045);
+
+    ctx.strokeStyle = `rgba(46, 160, 67, ${0.22 + pulse * 0.32})`;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.arc(tx, ty, 13 + pulse * 4, 0, Math.PI * 2);
+    ctx.stroke();
 
     ctx.strokeStyle = '#2EA043';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.arc(tx, ty, 10, 0, Math.PI * 2);
+    ctx.arc(tx, ty, 9, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.beginPath();
     ctx.moveTo(tx - 14, ty);
+    ctx.lineTo(tx - 5, ty);
+    ctx.moveTo(tx + 5, ty);
     ctx.lineTo(tx + 14, ty);
     ctx.moveTo(tx, ty - 14);
+    ctx.lineTo(tx, ty - 5);
+    ctx.moveTo(tx, ty + 5);
     ctx.lineTo(tx, ty + 14);
     ctx.stroke();
 
     ctx.fillStyle = '#2EA043';
-    ctx.font = '9px "JetBrains Mono", monospace';
+    ctx.beginPath();
+    ctx.arc(tx, ty, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#4ADE80';
+    ctx.font = '8px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('TARGET (540, 530)', tx, ty - 16);
+    ctx.fillText(`TARGET (${Math.round(targetPos[0])}, ${Math.round(targetPos[1])})`, tx, ty - 19);
     ctx.restore();
 
     // 6. Trajectories
-    // 6a. Historical Breadcrumb Track
+    // 6a. Historical Breadcrumb Track (Dashed Traversed Trail)
     if (state.routes.breadcrumb_history && state.routes.breadcrumb_history.length > 1) {
       ctx.save();
       ctx.beginPath();
@@ -631,8 +832,9 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       for (let i = 1; i < state.routes.breadcrumb_history.length; i++) {
         ctx.lineTo(toCanvasX(state.routes.breadcrumb_history[i].x), toCanvasY(state.routes.breadcrumb_history[i].y));
       }
-      ctx.strokeStyle = '#30363D';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(161, 161, 170, 0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
       ctx.stroke();
       ctx.restore();
     }
@@ -661,7 +863,7 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       ctx.restore();
     }
 
-    // 6c. Active Planned Safe Route (Telemetry Accent Solid Line)
+    // 6c. Active Planned Safe Route (Crisp Glowing Telemetry Path + Waypoints)
     if (state.routes.current_planned && state.routes.current_planned.length > 1) {
       ctx.save();
       ctx.beginPath();
@@ -669,14 +871,27 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       for (let i = 1; i < state.routes.current_planned.length; i++) {
         ctx.lineTo(toCanvasX(state.routes.current_planned[i][0]), toCanvasY(state.routes.current_planned[i][1]));
       }
+      ctx.strokeStyle = 'rgba(88, 166, 255, 0.24)';
+      ctx.lineWidth = 5.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
       ctx.strokeStyle = '#58A6FF';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      ctx.fillStyle = '#E6EDF3';
-      for (const pt of state.routes.current_planned) {
+      for (let i = 1; i < state.routes.current_planned.length; i++) {
+        const pt = state.routes.current_planned[i];
+        const px = toCanvasX(pt[0]);
+        const py = toCanvasY(pt[1]);
+        ctx.fillStyle = '#09090B';
         ctx.beginPath();
-        ctx.arc(toCanvasX(pt[0]), toCanvasY(pt[1]), 2, 0, Math.PI * 2);
+        ctx.arc(px, py, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#E6EDF3';
+        ctx.beginPath();
+        ctx.arc(px, py, 1.7, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -738,16 +953,16 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     const ry = toCanvasY(state.rover.y);
     const heading = state.rover.heading_rad;
 
-    // 7a. Camera Forward FOV Cone
+    // 7a. Forward Sensor / LiDAR Scan Cone
     ctx.save();
     ctx.translate(rx, ry);
     ctx.rotate(heading);
-    const fovLen = toWorldDist(45);
-    const fovAngle = Math.PI * 0.38;
+    const fovLen = toWorldDist(50);
+    const fovAngle = Math.PI * 0.4;
 
-    const fovGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, fovLen);
-    fovGrad.addColorStop(0, 'rgba(88, 166, 255, 0.15)');
-    fovGrad.addColorStop(0.8, 'rgba(88, 166, 255, 0.03)');
+    const fovGrad = ctx.createRadialGradient(0, 0, 3, 0, 0, fovLen);
+    fovGrad.addColorStop(0, 'rgba(88, 166, 255, 0.22)');
+    fovGrad.addColorStop(0.65, 'rgba(88, 166, 255, 0.08)');
     fovGrad.addColorStop(1, 'rgba(88, 166, 255, 0)');
 
     ctx.beginPath();
@@ -756,9 +971,19 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     ctx.closePath();
     ctx.fillStyle = fovGrad;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(88, 166, 255, 0.2)';
-    ctx.lineWidth = 1;
+
+    // Crisp outer scan wedge + range arcs
+    ctx.strokeStyle = 'rgba(88, 166, 255, 0.34)';
+    ctx.lineWidth = 0.9;
     ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(88, 166, 255, 0.22)';
+    ctx.setLineDash([2, 3]);
+    for (const rFrac of [0.5, 0.82]) {
+      ctx.beginPath();
+      ctx.arc(0, 0, fovLen * rFrac, -fovAngle / 2, fovAngle / 2);
+      ctx.stroke();
+    }
     ctx.restore();
 
     // 7b. EKF Covariance Uncertainty Ellipse (2σ)
@@ -929,37 +1154,41 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       ctx.translate(rx, ry);
       ctx.rotate(heading);
 
-      ctx.fillStyle = '#161B22';
-      ctx.fillRect(-8, -6, 16, 12);
-      ctx.strokeStyle = '#58A6FF';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(-8, -6, 16, 12);
-
-      ctx.fillStyle = '#080A0D';
-      ctx.strokeStyle = '#30363D';
-      ctx.lineWidth = 1;
+      // Six rocker-bogie wheel pods
+      ctx.fillStyle = '#09090B';
+      ctx.strokeStyle = '#52525B';
+      ctx.lineWidth = 0.9;
       const wheelPositions = [
-        [-6, -8], [0, -8], [6, -8],
-        [-6, 6], [0, 6], [6, 6],
+        [-6.5, -8.5], [0, -8.5], [6.5, -8.5],
+        [-6.5, 6.5], [0, 6.5], [6.5, 6.5],
       ];
       for (const [wx, wy] of wheelPositions) {
-        ctx.fillRect(wx - 2.5, wy, 5, 2);
-        ctx.strokeRect(wx - 2.5, wy, 5, 2);
+        ctx.fillRect(wx - 2.3, wy, 4.6, 2);
+        ctx.strokeRect(wx - 2.3, wy, 4.6, 2);
       }
 
-      // Direction Mast
+      // Aerospace directional chevron chassis
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(-6, -6.5);
+      ctx.lineTo(-3.5, 0);
+      ctx.lineTo(-6, 6.5);
+      ctx.closePath();
+      ctx.fillStyle = '#18181B';
+      ctx.fill();
+      ctx.strokeStyle = '#58A6FF';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+
+      // Nose mast & status core LED
       ctx.fillStyle = '#F85149';
       ctx.beginPath();
-      ctx.moveTo(10, 0);
-      ctx.lineTo(5, -3);
-      ctx.lineTo(5, 3);
-      ctx.closePath();
+      ctx.arc(8.5, 0, 1.5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Center Core Light
       ctx.fillStyle = state.ekf?.fallback_active ? '#F85149' : '#2EA043';
       ctx.beginPath();
-      ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+      ctx.arc(-0.5, 0, 2.2, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -1208,26 +1437,58 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       ctx.restore();
     }
 
-    // 11. Scale Bar in Meters (Bottom-Left)
-    const scaleBarMeters = scale * 100 > 120 ? 50 : 100;
-    const barWidthPx = scaleBarMeters * scale;
-    const sbX = toCanvasX(15);
-    const sbY = toCanvasY(worldH - 15);
-
+    // 11. Screen-Space Tactical North Indicator (Bottom-Left above LIVE pill) & Scale Bar (Bottom-Right above hint pill)
+    // 11a. Minimal Monochrome North ('N') Compass Indicator
+    const compX = 28;
+    const compY = Math.max(90, viewH - 104);
     ctx.save();
-    ctx.strokeStyle = '#8B949E';
-    ctx.lineWidth = 1.5;
+    ctx.fillStyle = 'rgba(12, 12, 14, 0.72)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(sbX, sbY - 4);
-    ctx.lineTo(sbX, sbY);
-    ctx.lineTo(sbX + barWidthPx, sbY);
-    ctx.lineTo(sbX + barWidthPx, sbY - 4);
+    ctx.arc(compX, compY, 13, 0, Math.PI * 2);
+    ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#8B949E';
-    ctx.font = '8px "JetBrains Mono", monospace';
+    // North arrow pointer
+    ctx.fillStyle = '#F4F4F5';
+    ctx.beginPath();
+    ctx.moveTo(compX, compY - 9);
+    ctx.lineTo(compX - 3.5, compY - 1);
+    ctx.lineTo(compX, compY - 2.8);
+    ctx.lineTo(compX + 3.5, compY - 1);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#A1A1AA';
+    ctx.font = 'bold 8px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`${scaleBarMeters}m SCALE`, sbX + barWidthPx / 2, sbY - 6);
+    ctx.fillText('N', compX, compY + 7.5);
+    ctx.restore();
+
+    // 11b. Crisp Aerospace Scale Bar
+    const scaleBarMeters = scale * 100 > 130 ? 50 : scale * 100 < 55 ? 200 : 100;
+    const barWidthPx = scaleBarMeters * scale;
+    const sbRight = viewW - 14;
+    const sbLeft = sbRight - barWidthPx;
+    const sbY = Math.max(95, viewH - 94);
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(228, 228, 231, 0.75)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(sbLeft, sbY - 5);
+    ctx.lineTo(sbLeft, sbY);
+    ctx.lineTo(sbRight, sbY);
+    ctx.lineTo(sbRight, sbY - 5);
+    ctx.moveTo(sbLeft + barWidthPx / 2, sbY - 3);
+    ctx.lineTo(sbLeft + barWidthPx / 2, sbY);
+    ctx.stroke();
+
+    ctx.fillStyle = '#A1A1AA';
+    ctx.font = '8px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${scaleBarMeters}m`, sbRight, sbY - 7);
     ctx.restore();
 
     ctx.restore(); // Clip
@@ -1413,6 +1674,7 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
           onMouseUp={handleMouseUp}
           onMouseLeave={() => {
             setIsDragging(false);
+            setHoverCoord(null);
             pointerDownPosRef.current = null;
           }}
           onWheel={handleWheel}
@@ -1452,11 +1714,18 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
               </span>
             </>
           )}
-          {hoverCoord && (
+          {hoverTelemetry && (
             <>
               <span className="text-[#222226]">·</span>
-              <span className="text-[#71717A] tabular-nums">
-                {hoverCoord.x}, {hoverCoord.y}m
+              <span className="text-[#A1A1AA] tabular-nums">
+                ({hoverTelemetry.x}, {hoverTelemetry.y})m
+                {hoverTelemetry.elev !== null && hoverTelemetry.slopeDeg !== null && (
+                  <span className="text-[#71717A]">
+                    {' '}
+                    · Z {hoverTelemetry.elev >= 0 ? '+' : ''}
+                    {hoverTelemetry.elev.toFixed(1)}m · {hoverTelemetry.slopeDeg.toFixed(1)}°
+                  </span>
+                )}
               </span>
             </>
           )}
