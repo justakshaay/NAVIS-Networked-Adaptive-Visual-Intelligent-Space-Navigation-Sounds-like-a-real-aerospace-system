@@ -824,5 +824,6 @@ class SimulationEngine:
                 "injected_hazards": self.terrain.injected_hazards,
                 "craters": self.terrain.craters,
                 "rock_fields": self.terrain.rock_fields,
+                "elevation_grid": self.terrain.elevation_grid[::2, ::2].round(1).tolist(),
             },
         }

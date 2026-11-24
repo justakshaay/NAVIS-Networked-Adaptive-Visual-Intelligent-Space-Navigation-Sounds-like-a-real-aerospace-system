@@ -1,0 +1,737 @@
+import React, { useRef, useMemo, useState, useEffect } from 'react';
+import * as THREE from 'three';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls, Stars, Html, Line } from '@react-three/drei';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import { Camera, Eye, Radio, Compass, AlertOctagon, Wind, Layers, Maximize2 } from 'lucide-react';
+import { SimulationFullState, SatelliteState, RoverState, SwarmRoverState } from '../types/simulation';
+
+interface Mars3DViewProps {
+  state: SimulationFullState | null;
+}
+
+// ==========================================
+// Heightmap & Terrain Surface Component
+// ==========================================
+interface TerrainMeshProps {
+  terrainSummary: SimulationFullState['terrain_summary'];
+  getElevation: (x: number, y: number) => number;
+}
+
+const MartianTerrain: React.FC<TerrainMeshProps> = ({ terrainSummary, getElevation }) => {
+  const width = terrainSummary?.width_m || 600;
+  const height = terrainSummary?.height_m || 600;
+  const grid = terrainSummary?.elevation_grid;
+
+  const { geometry, wireGeometry } = useMemo(() => {
+    const res = grid && grid.length > 2 ? grid.length : 30;
+    const geom = new THREE.PlaneGeometry(width, height, res - 1, res - 1);
+    geom.rotateX(-Math.PI / 2); // Orient horizontal in X-Z plane
+
+    const pos = geom.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+
+    // Color ramp palette:
+    // Low basin = #120D0B, Mid plains = #261A16, Ridges/High = #4A2B20
+    const colorLow = new THREE.Color('#140E0C');
+    const colorMid = new THREE.Color('#281B16');
+    const colorHigh = new THREE.Color('#4E2E22');
+    const tempColor = new THREE.Color();
+
+    let minElev = 9999;
+    let maxElev = -9999;
+
+    for (let i = 0; i < pos.count; i++) {
+      // Plane is centered around (0, 0), map to world (0..width, 0..height)
+      const wx = pos.getX(i) + width / 2;
+      const wz = pos.getZ(i) + height / 2;
+      const elev = getElevation(wx, wz);
+      pos.setY(i, elev);
+
+      if (elev < minElev) minElev = elev;
+      if (elev > maxElev) maxElev = elev;
+    }
+
+    const elevRange = Math.max(1, maxElev - minElev);
+
+    for (let i = 0; i < pos.count; i++) {
+      const elev = pos.getY(i);
+      const norm = (elev - minElev) / elevRange;
+
+      if (norm < 0.4) {
+        tempColor.copy(colorLow).lerp(colorMid, norm / 0.4);
+      } else {
+        tempColor.copy(colorMid).lerp(colorHigh, (norm - 0.4) / 0.6);
+      }
+
+      colors[i * 3] = tempColor.r;
+      colors[i * 3 + 1] = tempColor.g;
+      colors[i * 3 + 2] = tempColor.b;
+    }
+
+    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geom.computeVertexNormals();
+
+    const wire = geom.clone();
+
+    return { geometry: geom, wireGeometry: wire };
+  }, [width, height, grid, getElevation]);
+
+  return (
+    <group position={[width / 2, 0, height / 2]}>
+      {/* Matte Martian Regolith Surface */}
+      <mesh geometry={geometry} receiveShadow>
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.92}
+          metalness={0.08}
+          flatShading={false}
+        />
+      </mesh>
+
+      {/* Subtle Topographic Wireframe Overlay */}
+      <mesh geometry={wireGeometry} position={[0, 0.15, 0]}>
+        <meshBasicMaterial
+          color="#3A251C"
+          wireframe
+          transparent
+          opacity={0.22}
+        />
+      </mesh>
+
+      {/* Perimeter Hairline Boundary Frame */}
+      <lineSegments position={[0, 0.2, 0]}>
+        <edgesGeometry args={[new THREE.BoxGeometry(width, 1, height)]} />
+        <lineBasicMaterial color="#21262D" />
+      </lineSegments>
+    </group>
+  );
+};
+
+// ==========================================
+// 3D Rover Model Component
+// ==========================================
+interface Rover3DProps {
+  x: number;
+  y: number;
+  heading: number;
+  elevation: number;
+  color: string;
+  callsign: string;
+  role: string;
+  uncertainty: number;
+  speed: number;
+  isGhost?: boolean;
+  assignedSatellite?: string | null;
+}
+
+const Rover3D: React.FC<Rover3DProps> = ({
+  x,
+  y,
+  heading,
+  elevation,
+  color,
+  callsign,
+  role,
+  uncertainty,
+  speed,
+  isGhost = false,
+  assignedSatellite,
+}) => {
+  const meshRef = useRef<THREE.Group>(null);
+
+  // Position: x -> X, elevation -> Y, y -> Z
+  // Heading: in NAVIS, 0 rad is +X, math.atan2(vy, vx). In Three.js X-Z plane, forward is -heading.
+  const angle = -heading + Math.PI / 2;
+
+  return (
+    <group position={[x, elevation + 1.2, y]} rotation={[0, angle, 0]} ref={meshRef}>
+      {/* Rover Main Chassis */}
+      <mesh castShadow position={[0, 0.8, 0]}>
+        <boxGeometry args={[4.2, 1.8, 6.0]} />
+        <meshStandardMaterial
+          color={isGhost ? '#F85149' : '#161B22'}
+          roughness={0.4}
+          metalness={0.6}
+          transparent={isGhost}
+          opacity={isGhost ? 0.45 : 1.0}
+          wireframe={isGhost}
+        />
+      </mesh>
+
+      {/* Solar Panel Deck (Top) */}
+      <mesh position={[0, 1.8, 0]}>
+        <boxGeometry args={[4.8, 0.2, 6.4]} />
+        <meshStandardMaterial
+          color="#0F172A"
+          roughness={0.2}
+          metalness={0.8}
+        />
+      </mesh>
+
+      {/* Directional Sensor Mast */}
+      <mesh position={[0, 2.8, 2.0]}>
+        <cylinderGeometry args={[0.15, 0.2, 2.0, 8]} />
+        <meshStandardMaterial color="#30363D" metalness={0.8} />
+      </mesh>
+      {/* Stereo Camera Head */}
+      <mesh position={[0, 3.8, 2.0]}>
+        <boxGeometry args={[1.2, 0.5, 0.6]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+
+      {/* Status Mast Light */}
+      <mesh position={[0, 4.2, 2.0]}>
+        <sphereGeometry args={[0.25, 12, 12]} />
+        <meshBasicMaterial color={isGhost ? '#F85149' : color} />
+      </mesh>
+
+      {/* 6 Rocker-Bogie Wheels */}
+      {[-2.4, 2.4].map((wx, i) =>
+        [-2.0, 0, 2.0].map((wz, j) => (
+          <mesh
+            key={`${i}-${j}`}
+            position={[wx, 0, wz]}
+            rotation={[0, 0, Math.PI / 2]}
+          >
+            <cylinderGeometry args={[0.7, 0.7, 0.8, 12]} />
+            <meshStandardMaterial color="#080A0D" roughness={0.9} />
+          </mesh>
+        ))
+      )}
+
+      {/* 3D Floating Tactical Label */}
+      <Html
+        position={[0, 5.2, 0]}
+        center
+        distanceFactor={220}
+        zIndexRange={[10, 0]}
+      >
+        <div className="pointer-events-none select-none font-mono text-[10px] text-center whitespace-nowrap bg-[#0F1217]/90 backdrop-blur-md border border-[#21262D] rounded-[2px] px-2 py-0.5 shadow-panel">
+          <div className="font-bold flex items-center justify-center gap-1" style={{ color }}>
+            <span>{callsign.toUpperCase()}</span>
+            <span className="text-[8px] text-[#8B949E]">[{role.toUpperCase()}]</span>
+          </div>
+          <div className="text-[8px] text-[#8B949E] tabular-nums">
+            ±{uncertainty.toFixed(1)}m | {speed.toFixed(1)}m/s
+            {assignedSatellite && (
+              <span className="ml-1 text-[#2EA043]">({assignedSatellite})</span>
+            )}
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+};
+
+// ==========================================
+// 3D Orbital Satellite & RF Beam Component
+// ==========================================
+interface Satellite3DProps {
+  sat: SatelliteState;
+  targetPos: [number, number, number];
+  isContended?: boolean;
+}
+
+const Satellite3D: React.FC<Satellite3DProps> = ({ sat, targetPos }) => {
+  // Map ground track gx, gy into 3D space with scaled orbital altitude
+  const orbitHeight = 190 + (sat.altitude_km - 250) * 0.45;
+  const satX = sat.gx;
+  const satZ = sat.gy;
+
+  const beamColor = useMemo(() => {
+    if (sat.is_outage) return '#F85149';
+    if (sat.current_task === 'PNT') return '#58A6FF';
+    if (sat.current_task === 'IMAGING') return '#BC8CFF';
+    if (sat.current_task === 'COMMUNICATION') return '#2EA043';
+    return '#8B949E';
+  }, [sat.is_outage, sat.current_task]);
+
+  const hasBeam = sat.is_visible && sat.current_task !== 'IDLE';
+
+  return (
+    <group>
+      {/* Satellite Body & Solar Panels */}
+      <group position={[satX, orbitHeight, satZ]}>
+        {/* Main Equipment Bus */}
+        <mesh>
+          <boxGeometry args={[4.5, 3.0, 3.0]} />
+          <meshStandardMaterial
+            color="#D1D5DB"
+            metalness={0.85}
+            roughness={0.2}
+          />
+        </mesh>
+
+        {/* Solar Panel Array Wings (Left & Right) */}
+        <mesh position={[-5.5, 0, 0]}>
+          <boxGeometry args={[6.5, 0.2, 3.2]} />
+          <meshStandardMaterial
+            color="#1E3A8A"
+            metalness={0.6}
+            roughness={0.25}
+          />
+        </mesh>
+        <mesh position={[5.5, 0, 0]}>
+          <boxGeometry args={[6.5, 0.2, 3.2]} />
+          <meshStandardMaterial
+            color="#1E3A8A"
+            metalness={0.6}
+            roughness={0.25}
+          />
+        </mesh>
+
+        {/* Antenna Feed Horn pointing nadir (downward) */}
+        <mesh position={[0, -1.8, 0]}>
+          <coneGeometry args={[1.0, 1.2, 12]} />
+          <meshStandardMaterial color={beamColor} />
+        </mesh>
+
+        {/* Orbiting Satellite Identifier Tag */}
+        <Html
+          position={[0, 4.0, 0]}
+          center
+          distanceFactor={320}
+          zIndexRange={[20, 0]}
+        >
+          <div className="pointer-events-none select-none font-mono text-[9px] text-center bg-[#0F1217]/95 border border-[#21262D] rounded-[2px] px-1.5 py-0.5 whitespace-nowrap shadow-panel">
+            <div className="font-bold text-[#E6EDF3]">{sat.sat_id}</div>
+            <div
+              className="text-[8px] font-semibold"
+              style={{ color: beamColor }}
+            >
+              {sat.is_outage ? 'OUTAGE' : sat.is_visible ? sat.current_task : 'ORBIT PASS'}
+            </div>
+            {sat.target_rover_id && sat.is_visible && (
+              <div className="text-[7px] text-[#8B949E]">
+                → {sat.target_rover_id}
+              </div>
+            )}
+          </div>
+        </Html>
+      </group>
+
+      {/* Downward Ground Footprint Target Disc */}
+      {sat.is_visible && (
+        <mesh position={[satX, 0.3, satZ]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[sat.fov_radius_m * 0.96, sat.fov_radius_m, 48]} />
+          <meshBasicMaterial
+            color={beamColor}
+            transparent
+            opacity={0.18}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+
+      {/* Live Glowing Optical / RF Communication Beam */}
+      {hasBeam && (
+        <Line
+          points={[
+            [satX, orbitHeight - 1.5, satZ],
+            targetPos,
+          ]}
+          color={beamColor}
+          lineWidth={sat.current_task === 'PNT' ? 2.0 : 1.5}
+          dashed={sat.current_task === 'COMMUNICATION'}
+          dashScale={12}
+          dashSize={4}
+          gapSize={2}
+          transparent
+          opacity={0.75}
+        />
+      )}
+
+      {/* Outage Warning Beam */}
+      {sat.is_outage && (
+        <Line
+          points={[
+            [satX, orbitHeight - 1.5, satZ],
+            targetPos,
+          ]}
+          color="#F85149"
+          lineWidth={1}
+          dashed
+          dashScale={10}
+          dashSize={3}
+          gapSize={3}
+          transparent
+          opacity={0.4}
+        />
+      )}
+    </group>
+  );
+};
+
+// ==========================================
+// Main 3D Interactive Scene Container
+// ==========================================
+export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
+  const controlsRef = useRef<OrbitControlsImpl>(null);
+  const [cameraMode, setCameraMode] = useState<'ORBITAL' | 'FOLLOW' | 'TOP_DOWN'>('ORBITAL');
+
+  const width = state?.terrain_summary.width_m || 600;
+  const height = state?.terrain_summary.height_m || 600;
+
+  // Bilinear Elevation Sampler Function
+  const getElevation = useMemo(() => {
+    const grid = state?.terrain_summary.elevation_grid;
+    if (!grid || grid.length < 2) {
+      return (_x: number, _z: number) => 0.0;
+    }
+    const rows = grid.length;
+    const cols = grid[0].length;
+
+    return (x: number, z: number): number => {
+      const u = Math.max(0, Math.min(1, x / width)) * (cols - 1);
+      const v = Math.max(0, Math.min(1, z / height)) * (rows - 1);
+
+      const x0 = Math.floor(u);
+      const x1 = Math.min(cols - 1, x0 + 1);
+      const z0 = Math.floor(v);
+      const z1 = Math.min(rows - 1, z0 + 1);
+
+      const fx = u - x0;
+      const fz = v - z0;
+
+      const h00 = grid[z0][x0];
+      const h10 = grid[z0][x1];
+      const h01 = grid[z1][x0];
+      const h11 = grid[z1][x1];
+
+      const top = h00 * (1 - fx) + h10 * fx;
+      const bottom = h01 * (1 - fx) + h11 * fx;
+      return top * (1 - fz) + bottom * fz;
+    };
+  }, [state?.terrain_summary.elevation_grid, width, height]);
+
+  // Lead Rover Coordinates for Camera & RF Beams
+  const leadRoverPos: [number, number, number] = useMemo(() => {
+    if (!state) return [300, 5, 300];
+    const rx = state.rover.x;
+    const rz = state.rover.y;
+    return [rx, getElevation(rx, rz) + 1.2, rz];
+  }, [state?.rover.x, state?.rover.y, getElevation]);
+
+  // Camera preset handler
+  const setPreset = (mode: 'ORBITAL' | 'FOLLOW' | 'TOP_DOWN') => {
+    setCameraMode(mode);
+    const controls = controlsRef.current;
+    if (!controls) return;
+
+    if (mode === 'ORBITAL') {
+      controls.target.set(width / 2, 10, height / 2);
+      controls.object.position.set(width / 2, 420, height * 1.2);
+    } else if (mode === 'TOP_DOWN') {
+      controls.target.set(width / 2, 0, height / 2);
+      controls.object.position.set(width / 2, 720, height / 2 + 1);
+    } else if (mode === 'FOLLOW') {
+      controls.target.set(leadRoverPos[0], leadRoverPos[1], leadRoverPos[2]);
+      const heading = state?.rover.heading_rad || 0;
+      controls.object.position.set(
+        leadRoverPos[0] - Math.cos(heading) * 45,
+        leadRoverPos[1] + 25,
+        leadRoverPos[2] - Math.sin(heading) * 45
+      );
+    }
+  };
+
+  // Follow camera tick
+  const CameraFollowController: React.FC = () => {
+    const { camera } = useThree();
+    useFrame(() => {
+      if (cameraMode === 'FOLLOW' && controlsRef.current && state) {
+        const controls = controlsRef.current;
+        controls.target.lerp(
+          new THREE.Vector3(leadRoverPos[0], leadRoverPos[1] + 2, leadRoverPos[2]),
+          0.05
+        );
+      }
+    });
+    return null;
+  };
+
+  // Trajectory Lines for primary rover
+  const breadcrumbPoints: [number, number, number][] = useMemo(() => {
+    const hist = state?.routes.breadcrumb_history || [];
+    if (hist.length < 2) return [];
+    return hist.map((p) => [p.x, getElevation(p.x, p.y) + 0.4, p.y]);
+  }, [state?.routes.breadcrumb_history, getElevation]);
+
+  const plannedRoutePoints: [number, number, number][] = useMemo(() => {
+    const pts = state?.routes.current_planned || [];
+    if (pts.length < 2) return [];
+    return pts.map((p) => [p[0], getElevation(p[0], p[1]) + 0.3, p[1]]);
+  }, [state?.routes.current_planned, getElevation]);
+
+  const mlPredictionPoints: [number, number, number][] = useMemo(() => {
+    const pts = state?.trajectory_prediction.predicted_trajectory || [];
+    if (pts.length < 2) return [];
+    return pts.map((p) => [p.x, getElevation(p.x, p.y) + 0.5, p.y]);
+  }, [state?.trajectory_prediction.predicted_trajectory, getElevation]);
+
+  // Target rover position lookup for satellites
+  const getRoverPosForSat = (sat: SatelliteState): [number, number, number] => {
+    if (state?.swarm_mode_enabled && state.swarm_rovers && sat.target_rover_id) {
+      const tr = state.swarm_rovers.find((r) => r.rover_id === sat.target_rover_id);
+      if (tr) {
+        return [tr.true_pos[0], getElevation(tr.true_pos[0], tr.true_pos[1]) + 1.2, tr.true_pos[1]];
+      }
+    }
+    return leadRoverPos;
+  };
+
+  return (
+    <div className="w-full h-full relative bg-[#080A0D] overflow-hidden select-none font-mono">
+      {/* 3D Canvas Viewport */}
+      <Canvas
+        camera={{ position: [width / 2, 420, height * 1.2], fov: 45, near: 1, far: 4000 }}
+        shadows
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
+      >
+        <color attach="background" args={['#080A0D']} />
+
+        {/* Aerospace Deep Space Ambient & Directional Sun Lighting */}
+        <ambientLight intensity={0.65} color="#1E232B" />
+        <directionalLight
+          position={[450, 360, 180]}
+          intensity={1.3}
+          color="#FFE9D8"
+          castShadow
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-camera-near={10}
+          shadow-camera-far={1200}
+          shadow-camera-left={-width}
+          shadow-camera-right={width}
+          shadow-camera-top={height}
+          shadow-camera-bottom={-height}
+        />
+        <directionalLight position={[-200, 150, -200]} intensity={0.25} color="#3B82F6" />
+
+        {/* Starfield */}
+        <Stars radius={1200} depth={200} count={3500} factor={4} saturation={0} fade speed={0.5} />
+
+        <CameraFollowController />
+
+        {/* Orbit Controls with Damping */}
+        <OrbitControls
+          ref={controlsRef}
+          enableDamping
+          dampingFactor={0.06}
+          maxPolarAngle={Math.PI / 2 - 0.04}
+          minDistance={20}
+          maxDistance={1800}
+        />
+
+        {/* 1. Martian Displaced Terrain Surface */}
+        {state && (
+          <MartianTerrain
+            terrainSummary={state.terrain_summary}
+            getElevation={getElevation}
+          />
+        )}
+
+        {/* 2. Primary Rover (Mode C NAVIS) or Swarm Rovers */}
+        {state && !state.swarm_mode_enabled && (
+          <Rover3D
+            x={state.rover.x}
+            y={state.rover.y}
+            heading={state.rover.heading_rad}
+            elevation={getElevation(state.rover.x, state.rover.y)}
+            color="#58A6FF"
+            callsign="NAVIS-01"
+            role="Explorer"
+            uncertainty={state.ekf.uncertainty_m}
+            speed={state.rover.speed}
+            assignedSatellite={state.ai_scheduler.selected_satellite}
+          />
+        )}
+
+        {/* 3. Shadow Rover (Mode A Dead Reckoning) if Shadow Race Active */}
+        {state?.shadow_race_enabled && state.shadow_rover && (
+          <Rover3D
+            x={state.shadow_rover.true_pos[0]}
+            y={state.shadow_rover.true_pos[1]}
+            heading={state.shadow_rover.heading}
+            elevation={getElevation(state.shadow_rover.true_pos[0], state.shadow_rover.true_pos[1])}
+            color="#F85149"
+            callsign="SHADOW"
+            role="Mode A DR"
+            uncertainty={state.shadow_rover.localization_error}
+            speed={state.shadow_rover.speed}
+            isGhost
+          />
+        )}
+
+        {/* 4. Swarm Rovers (Alpha, Beta, Gamma) if Swarm Active */}
+        {state?.swarm_mode_enabled && state.swarm_rovers && (
+          <>
+            {state.swarm_rovers.map((sr) => (
+              <Rover3D
+                key={sr.rover_id}
+                x={sr.true_pos[0]}
+                y={sr.true_pos[1]}
+                heading={sr.heading}
+                elevation={getElevation(sr.true_pos[0], sr.true_pos[1])}
+                color={sr.color}
+                callsign={sr.callsign}
+                role={sr.role}
+                uncertainty={sr.uncertainty_m}
+                speed={sr.speed}
+                assignedSatellite={sr.assigned_satellite_id}
+              />
+            ))}
+          </>
+        )}
+
+        {/* 5. Trajectory Lines & Paths */}
+        {breadcrumbPoints.length > 1 && (
+          <Line
+            points={breadcrumbPoints}
+            color="#58A6FF"
+            lineWidth={2}
+            transparent
+            opacity={0.65}
+          />
+        )}
+
+        {plannedRoutePoints.length > 1 && (
+          <Line
+            points={plannedRoutePoints}
+            color="#58A6FF"
+            lineWidth={1.5}
+            dashed
+            dashScale={8}
+            dashSize={3}
+            gapSize={2}
+            transparent
+            opacity={0.4}
+          />
+        )}
+
+        {mlPredictionPoints.length > 1 && (
+          <Line
+            points={mlPredictionPoints}
+            color="#D29922"
+            lineWidth={2}
+            transparent
+            opacity={0.8}
+          />
+        )}
+
+        {/* 6. Dynamic Injected Hazards */}
+        {state?.terrain_summary.injected_hazards.map((hz) => {
+          const hzElev = getElevation(hz.x, hz.y);
+          return (
+            <group key={hz.id} position={[hz.x, hzElev, hz.y]}>
+              <mesh position={[0, 4, 0]}>
+                <cylinderGeometry args={[hz.radius * 0.7, hz.radius * 0.8, 8, 16]} />
+                <meshStandardMaterial color="#F85149" roughness={0.7} />
+              </mesh>
+              {/* Pulsing ring warning perimeter */}
+              <mesh position={[0, 0.4, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[hz.radius * 0.9, hz.radius, 32]} />
+                <meshBasicMaterial color="#F85149" transparent opacity={0.6} side={THREE.DoubleSide} />
+              </mesh>
+            </group>
+          );
+        })}
+
+        {/* 7. Dynamic Moving Dust Storm Zone */}
+        {state?.dust_storm.active && (
+          <group position={[state.dust_storm.x, 25, state.dust_storm.y]}>
+            {/* Amber swirl dome */}
+            <mesh>
+              <sphereGeometry args={[state.dust_storm.radius, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+              <meshStandardMaterial
+                color="#D97706"
+                transparent
+                opacity={0.3}
+                roughness={0.9}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[state.dust_storm.radius * 0.95, state.dust_storm.radius, 36]} />
+              <meshBasicMaterial color="#F59E0B" transparent opacity={0.7} side={THREE.DoubleSide} />
+            </mesh>
+          </group>
+        )}
+
+        {/* 8. Science Target Beacon */}
+        {state && (
+          <group position={[state.terrain_summary.target_pos[0], getElevation(state.terrain_summary.target_pos[0], state.terrain_summary.target_pos[1]), state.terrain_summary.target_pos[1]]}>
+            <mesh position={[0, 0.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[8, 12, 32]} />
+              <meshBasicMaterial color="#2EA043" side={THREE.DoubleSide} />
+            </mesh>
+            {/* Target Laser Beacon beam pointing to sky */}
+            <mesh position={[0, 100, 0]}>
+              <cylinderGeometry args={[0.3, 0.3, 200, 8]} />
+              <meshBasicMaterial color="#2EA043" transparent opacity={0.4} />
+            </mesh>
+          </group>
+        )}
+
+        {/* 9. Orbital Constellation & RF Beams */}
+        {state?.satellites.map((sat) => (
+          <Satellite3D
+            key={sat.sat_id}
+            sat={sat}
+            targetPos={getRoverPosForSat(sat)}
+          />
+        ))}
+      </Canvas>
+
+      {/* Floating 3D Camera Controls Toolbar (Top-Right) */}
+      <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-[#0F1217]/90 backdrop-blur-md border border-[#21262D] rounded-[2px] p-1 shadow-panel text-[10px]">
+        <span className="text-[9px] uppercase tracking-wider text-[#8B949E] px-1 font-semibold hidden sm:inline">
+          CAMERA:
+        </span>
+        <button
+          onClick={() => setPreset('ORBITAL')}
+          className={`px-2 py-0.5 rounded-[1px] font-semibold transition-colors duration-150 ${
+            cameraMode === 'ORBITAL'
+              ? 'bg-[#58A6FF] text-[#080A0D] font-bold'
+              : 'text-[#8B949E] hover:text-[#E6EDF3]'
+          }`}
+          title="High-angle 3D theater orbital view"
+        >
+          ORBITAL
+        </button>
+        <button
+          onClick={() => setPreset('FOLLOW')}
+          className={`px-2 py-0.5 rounded-[1px] font-semibold transition-colors duration-150 ${
+            cameraMode === 'FOLLOW'
+              ? 'bg-[#58A6FF] text-[#080A0D] font-bold'
+              : 'text-[#8B949E] hover:text-[#E6EDF3]'
+          }`}
+          title="Close chase tracking view behind the lead rover"
+        >
+          CHASE CAM
+        </button>
+        <button
+          onClick={() => setPreset('TOP_DOWN')}
+          className={`px-2 py-0.5 rounded-[1px] font-semibold transition-colors duration-150 ${
+            cameraMode === 'TOP_DOWN'
+              ? 'bg-[#58A6FF] text-[#080A0D] font-bold'
+              : 'text-[#8B949E] hover:text-[#E6EDF3]'
+          }`}
+          title="Nadir 90-degree orbital pass view"
+        >
+          NADIR
+        </button>
+      </div>
+
+      {/* Floating 3D Instructions Badge (Bottom-Right) */}
+      <div className="absolute bottom-20 right-3 z-10 pointer-events-none hidden md:block">
+        <div className="text-[9px] font-mono text-[#8B949E] bg-[#0F1217]/85 border border-[#21262D] px-2 py-1 rounded-[2px] backdrop-blur-sm">
+          <span>LEFT CLICK: ROTATE | RIGHT CLICK: PAN | SCROLL: ZOOM</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Mars3DView;

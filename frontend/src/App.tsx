@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { useSimulation } from './hooks/useSimulation';
 import { Header } from './components/Header';
 import { MarsCanvas } from './components/MarsCanvas';
@@ -11,6 +11,8 @@ import { RealtimeCharts } from './components/RealtimeCharts';
 import { BenchmarkModal } from './components/BenchmarkModal';
 import { DemoScenarioGuide } from './components/DemoScenarioGuide';
 import { Layers, Satellite, Terminal } from 'lucide-react';
+
+const Mars3DView = lazy(() => import('./components/Mars3DView'));
 
 export function App() {
   const {
@@ -38,6 +40,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'GNC' | 'ORBITAL' | 'AI'>('GNC');
   const [isDemoGuideVisible, setIsDemoGuideVisible] = useState<boolean>(true);
   const [isHazardMode, setIsHazardMode] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'2D' | '3D'>('2D');
 
   const handleOpenBenchmark = () => {
     setIsBenchmarkModalOpen(true);
@@ -69,6 +72,8 @@ export function App() {
         onToggleDemoGuide={() => setIsDemoGuideVisible((v) => !v)}
         onStartDemo={runDemo}
         onSetTerrainPreset={setTerrainPreset}
+        viewMode={viewMode}
+        onToggleViewMode={setViewMode}
       />
 
       {/* 2. Main Cockpit Workspace */}
@@ -86,17 +91,30 @@ export function App() {
             </div>
           )}
 
-          {/* Full-Height Tactical Mars Canvas */}
+          {/* Full-Height Tactical Mars Viewport (2D Canvas or 3D Orbital Scene) */}
           <div className="flex-1 min-h-0 relative">
-            <MarsCanvas
-              state={state}
-              onInjectHazard={(x, y, rad, type) => {
-                injectHazard(x, y, rad, type);
-                setIsHazardMode(false);
-              }}
-              isHazardModeActive={isHazardMode}
-              onCancelHazardMode={() => setIsHazardMode(false)}
-            />
+            {viewMode === '2D' ? (
+              <MarsCanvas
+                state={state}
+                onInjectHazard={(x, y, rad, type) => {
+                  injectHazard(x, y, rad, type);
+                  setIsHazardMode(false);
+                }}
+                isHazardModeActive={isHazardMode}
+                onCancelHazardMode={() => setIsHazardMode(false)}
+              />
+            ) : (
+              <Suspense
+                fallback={
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#080A0D] text-[#58A6FF] font-mono text-xs gap-3">
+                    <div className="w-6 h-6 border-2 border-[#58A6FF] border-t-transparent rounded-full animate-spin" />
+                    <span className="tracking-widest uppercase">INITIALIZING 3D ORBITAL VIEWPORT...</span>
+                  </div>
+                }
+              >
+                <Mars3DView state={state} />
+              </Suspense>
+            )}
 
             {/* Sleek Minimal Floating Command Dock */}
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-[95%]">

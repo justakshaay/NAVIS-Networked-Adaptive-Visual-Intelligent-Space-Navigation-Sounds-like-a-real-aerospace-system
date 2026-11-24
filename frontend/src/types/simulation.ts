@@ -281,6 +281,7 @@ export interface SimulationFullState {
       y: number;
       radius: number;
     }>;
+    elevation_grid?: number[][];
   };
 }
 

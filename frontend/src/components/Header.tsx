@@ -10,6 +10,8 @@ interface HeaderProps {
   onToggleDemoGuide?: () => void;
   onStartDemo?: () => void;
   onSetTerrainPreset?: (preset: 'procedural' | 'jezero_crater') => void;
+  viewMode?: '2D' | '3D';
+  onToggleViewMode?: (mode: '2D' | '3D') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +22,8 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleDemoGuide,
   onStartDemo,
   onSetTerrainPreset,
+  viewMode = '2D',
+  onToggleViewMode,
 }) => {
   const [utcTime, setUtcTime] = useState<string>('');
 
@@ -103,6 +107,35 @@ export const Header: React.FC<HeaderProps> = ({
             title="Switch to NASA Jezero Crater Western River Delta & Ancient Lakebed Basin"
           >
             JEZERO CRATER
+          </button>
+        </div>
+
+        {/* 2D / 3D Viewport Toggle Pill */}
+        <div className="flex items-center bg-[#161B22] border border-[#21262D] rounded-[2px] p-0.5 text-[10px]">
+          <span className="text-[9px] uppercase tracking-wider text-[#8B949E] px-1 font-semibold hidden md:inline">
+            VIEW:
+          </span>
+          <button
+            onClick={() => onToggleViewMode?.('2D')}
+            className={`px-2 py-0.5 rounded-[1px] font-bold transition-colors duration-150 ${
+              viewMode === '2D'
+                ? 'bg-[#58A6FF] text-[#080A0D]'
+                : 'text-[#8B949E] hover:text-[#E6EDF3]'
+            }`}
+            title="Switch to 2D High-Resolution Tactical Top-Down Canvas"
+          >
+            2D TACTICAL
+          </button>
+          <button
+            onClick={() => onToggleViewMode?.('3D')}
+            className={`px-2 py-0.5 rounded-[1px] font-bold transition-colors duration-150 ${
+              viewMode === '3D'
+                ? 'bg-[#58A6FF] text-[#080A0D]'
+                : 'text-[#8B949E] hover:text-[#E6EDF3]'
+            }`}
+            title="Switch to Interactive 3D Martian Surface & Orbital Constellation View"
+          >
+            3D ORBITAL
           </button>
         </div>
 
