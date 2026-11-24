@@ -543,10 +543,10 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       ctx.setLineDash([3, 3]);
       ctx.stroke();
 
-      ctx.fillStyle = state.ekf.fallback_active ? '#F85149' : '#8B949E';
+      ctx.fillStyle = state.ekf?.fallback_active ? '#F85149' : '#8B949E';
       ctx.font = '8px "JetBrains Mono", monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`2σ: ±${state.ekf.uncertainty_m}m`, 0, -semiMinor - 4);
+      ctx.fillText(`2σ: ±${state.ekf?.uncertainty_m ?? 0.5}m`, 0, -semiMinor - 4);
       ctx.restore();
     }
 
@@ -693,7 +693,7 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       ctx.fill();
 
       // Center Core Light
-      ctx.fillStyle = state.ekf.fallback_active ? '#F85149' : '#2EA043';
+      ctx.fillStyle = state.ekf?.fallback_active ? '#F85149' : '#2EA043';
       ctx.beginPath();
       ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
       ctx.fill();
@@ -1046,7 +1046,7 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
   const tickerText = useMemo(() => {
     if (!state) return 'INITIALIZING GNC SUBSYSTEMS...';
 
-    if (state.hazard_alert?.active_alert || state.rover.mission_status === 'HAZARD_AVOIDANCE') {
+    if (state.hazard_alert?.active_alert || state.rover?.mission_status === 'HAZARD_AVOIDANCE') {
       const type = state.hazard_alert?.active_alert?.type || 'OBSTACLE';
       return `⚠️ AVOIDANCE: A* pathplanner recalculating around ${type}`;
     }
@@ -1175,7 +1175,7 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
               <span className="text-[#58A6FF] font-bold text-[11px]">NAVIS (MODE C):</span>
               <span className="text-[#E6EDF3] font-semibold tabular-nums">{posError.toFixed(2)}m Err</span>
               <span className="text-[#2EA043] text-[10px]">
-                ({(state.terrain_summary.injected_hazards?.length ?? 0) + (state.hazard_alert?.detected_count ?? 0)} Avoided)
+                ({(state.terrain_summary?.injected_hazards?.length ?? 0) + (state.hazard_alert?.detected_count ?? 0)} Avoided)
               </span>
             </div>
 
@@ -1185,8 +1185,8 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-[1px] bg-[#F85149]" />
               <span className="text-[#F85149] font-bold text-[11px]">SHADOW (MODE A):</span>
-              <span className="text-[#F85149] font-semibold tabular-nums">{state.shadow_rover.localization_error.toFixed(2)}m Err</span>
-              <span className="text-[#F85149] text-[10px]">({state.shadow_rover.hazard_collisions} Collisions)</span>
+              <span className="text-[#F85149] font-semibold tabular-nums">{(state.shadow_rover?.localization_error ?? 0).toFixed(2)}m Err</span>
+              <span className="text-[#F85149] text-[10px]">({state.shadow_rover?.hazard_collisions ?? 0} Collisions)</span>
             </div>
 
             <div className="w-[1px] h-4 bg-[#21262D] hidden sm:block" />
@@ -1195,12 +1195,12 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
             <div className="flex items-center gap-1 text-[11px] font-bold">
               <span className="text-[#8B949E]">DRIFT ADVANTAGE:</span>
               <span className="text-[#2EA043] tabular-nums">
-                {state.shadow_rover.localization_error > posError
+                {(state.shadow_rover?.localization_error ?? 0) > posError
                   ? `NAVIS ${Math.min(
                       99,
                       Math.round(
-                        ((state.shadow_rover.localization_error - posError) /
-                          Math.max(0.01, state.shadow_rover.localization_error)) *
+                        (((state.shadow_rover?.localization_error ?? 0) - posError) /
+                          Math.max(0.01, state.shadow_rover?.localization_error ?? 1)) *
                           100
                       )
                     )}% MORE ACCURATE`

@@ -95,7 +95,7 @@ export const Header: React.FC<HeaderProps> = ({
                 : 'text-[#D29922]'
             }`}
           >
-            {state?.mode_meta.tag || (currentMode === 'MODE_C' ? 'ADAPTIVE AI' : currentMode)}
+            {state?.mode_meta?.tag || (currentMode === 'MODE_C' ? 'ADAPTIVE AI' : currentMode)}
           </span>
         </div>
 
@@ -158,7 +158,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Autonomous Fallback Warning Flag */}
-        {state?.ekf.fallback_active && (
+        {Boolean(state?.ekf?.fallback_active) && (
           <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#F85149]/15 border border-[#F85149] rounded-[2px] text-[11px] text-[#F85149] animate-pulse">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span className="font-bold">AUTONOMOUS FALLBACK</span>
@@ -178,7 +178,7 @@ export const Header: React.FC<HeaderProps> = ({
           <Compass className="w-3.5 h-3.5 text-[#2EA043]" />
           <span className="text-[#8B949E]">STATUS:</span>
           <span className="text-[#E6EDF3] font-semibold tabular-nums">
-            {state?.rover.mission_status || 'INITIALIZING'}
+            {state?.rover?.mission_status || 'INITIALIZING'}
           </span>
         </div>
       </div>

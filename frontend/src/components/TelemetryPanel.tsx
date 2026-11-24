@@ -39,7 +39,7 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({ rover, metrics }
             <MapPin className="w-2.5 h-2.5 text-[#58A6FF]" /> POS (X, Y)
           </div>
           <div className="text-sm font-semibold text-[#E6EDF3] num-readout mt-0.5">
-            {rover?.x.toFixed(1)}m, {rover?.y.toFixed(1)}m
+            {(rover?.x ?? 50.0).toFixed(1)}m, {(rover?.y ?? 50.0).toFixed(1)}m
           </div>
           <div className="text-[8px] text-[#6E7681]">GRID COORD</div>
         </div>
@@ -103,7 +103,7 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({ rover, metrics }
             <Radio className="w-2.5 h-2.5 text-[#58A6FF]" /> PNT COVERAGE
           </div>
           <div className="text-sm font-semibold text-[#58A6FF] num-readout mt-0.5">
-            {metrics?.coverage_pct.toFixed(1) || '100.0'}%
+            {(metrics?.coverage_pct ?? 100.0).toFixed(1)}%
           </div>
           <div className="text-[8px] text-[#6E7681]">WINDOW PCT</div>
         </div>

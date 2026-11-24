@@ -100,6 +100,20 @@ class SimulationEngine:
         self.planner.current_route = list(initial_route)
         self.planner.old_route = []
         self.metrics.reset(initial_route)
+        self.latest_ekf = self.ekf.get_estimate()
+        self.latest_sensors = self.sensors.sample(
+            dt=0.05,
+            true_x=self.rover.x,
+            true_y=self.rover.y,
+            true_vx=0.0,
+            true_vy=0.0,
+            true_heading=self.rover.heading,
+            true_speed=0.0,
+            true_accel=0.0,
+            true_omega=0.0,
+            wheel_slip=0.0,
+            pnt_available=True,
+        )
         self.add_log("SYSTEM", "NAVIS Mission Navigation Subsystems Initialized.", "info")
 
     def add_log(self, category: str, message: str, level: str = "info") -> None:

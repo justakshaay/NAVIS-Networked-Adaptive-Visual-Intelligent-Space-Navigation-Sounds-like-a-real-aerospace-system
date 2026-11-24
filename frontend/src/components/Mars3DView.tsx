@@ -407,11 +407,11 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
 
   // Lead Rover Coordinates for Camera & RF Beams
   const leadRoverPos: [number, number, number] = useMemo(() => {
-    if (!state) return [300, 5, 300];
-    const rx = state.rover.x;
-    const rz = state.rover.y;
+    if (!state?.rover) return [300, 5, 300];
+    const rx = state.rover.x ?? 300;
+    const rz = state.rover.y ?? 300;
     return [rx, getElevation(rx, rz) + 1.2, rz];
-  }, [state?.rover.x, state?.rover.y, getElevation]);
+  }, [state?.rover?.x, state?.rover?.y, getElevation]);
 
   // Camera preset handler
   const setPreset = (mode: 'ORBITAL' | 'FOLLOW' | 'TOP_DOWN') => {
@@ -427,7 +427,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
       controls.object.position.set(width / 2, 720, height / 2 + 1);
     } else if (mode === 'FOLLOW') {
       controls.target.set(leadRoverPos[0], leadRoverPos[1], leadRoverPos[2]);
-      const heading = state?.rover.heading_rad || 0;
+      const heading = state?.rover?.heading_rad || 0;
       controls.object.position.set(
         leadRoverPos[0] - Math.cos(heading) * 45,
         leadRoverPos[1] + 25,
@@ -533,18 +533,18 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
         )}
 
         {/* 2. Primary Rover (Mode C NAVIS) or Swarm Rovers */}
-        {state && !state.swarm_mode_enabled && (
+        {state?.rover && !state.swarm_mode_enabled && (
           <Rover3D
-            x={state.rover.x}
-            y={state.rover.y}
-            heading={state.rover.heading_rad}
-            elevation={getElevation(state.rover.x, state.rover.y)}
+            x={state.rover.x ?? 50}
+            y={state.rover.y ?? 50}
+            heading={state.rover.heading_rad ?? 0}
+            elevation={getElevation(state.rover.x ?? 50, state.rover.y ?? 50)}
             color="#58A6FF"
             callsign="NAVIS-01"
             role="Explorer"
-            uncertainty={state.ekf.uncertainty_m}
-            speed={state.rover.speed}
-            assignedSatellite={state.ai_scheduler.selected_satellite}
+            uncertainty={state.ekf?.uncertainty_m ?? 0.5}
+            speed={state.rover.speed ?? 0}
+            assignedSatellite={state.ai_scheduler?.selected_satellite ?? null}
           />
         )}
 

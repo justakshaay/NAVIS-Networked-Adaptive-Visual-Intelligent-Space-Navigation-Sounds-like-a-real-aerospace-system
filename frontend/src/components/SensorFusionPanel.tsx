@@ -122,22 +122,22 @@ export const SensorFusionPanel: React.FC<SensorFusionPanelProps> = ({
           <div className="flex justify-between items-center text-[11px]">
             <span className="text-[#8B949E]">EST POS (X, Y):</span>
             <span className="text-[#E6EDF3] font-semibold num-readout">
-              {ekf?.est_x.toFixed(2)}m, {ekf?.est_y.toFixed(2)}m
+              {(ekf?.est_x ?? truePos.x ?? 50.0).toFixed(2)}m, {(ekf?.est_y ?? truePos.y ?? 50.0).toFixed(2)}m
             </span>
           </div>
           <div className="flex justify-between items-center text-[11px]">
             <span className="text-[#8B949E]">EST VEL (Vx, Vy):</span>
             <span className="text-[#E6EDF3] num-readout">
-              {ekf?.est_vx.toFixed(2)}m/s, {ekf?.est_vy.toFixed(2)}m/s
+              {(ekf?.est_vx ?? 0.0).toFixed(2)}m/s, {(ekf?.est_vy ?? 0.0).toFixed(2)}m/s
             </span>
           </div>
           <div className="flex justify-between items-center text-[11px]">
             <span className="text-[#8B949E]">EST HEADING (θ):</span>
-            <span className="text-[#E6EDF3] num-readout">{ekf?.est_heading_deg.toFixed(1)}°</span>
+            <span className="text-[#E6EDF3] num-readout">{(ekf?.est_heading_deg ?? truePos.heading_deg ?? 0.0).toFixed(1)}°</span>
           </div>
           <div className="flex justify-between items-center text-[10px] text-[#6E7681] pt-1 border-t border-[#21262D]">
             <span>IMU ACC BIAS:</span>
-            <span className="num-readout">{ekf?.bias_estimates.b_ax.toFixed(4)} m/s²</span>
+            <span className="num-readout">{(ekf?.bias_estimates?.b_ax ?? 0.04).toFixed(4)} m/s²</span>
           </div>
         </div>
       </div>
