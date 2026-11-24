@@ -1,4 +1,4 @@
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useSimulation } from './hooks/useSimulation';
 import { Header } from './components/Header';
 import { MarsCanvas } from './components/MarsCanvas';
@@ -12,6 +12,7 @@ import { TelemetryPanel } from './components/TelemetryPanel';
 import { RealtimeCharts } from './components/RealtimeCharts';
 import { BenchmarkModal } from './components/BenchmarkModal';
 import { DemoScenarioGuide } from './components/DemoScenarioGuide';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { generateDebriefData, exportTelemetryCsv } from './utils/exportReport';
 import { Layers, Satellite, Terminal } from 'lucide-react';
 
@@ -51,6 +52,7 @@ export function App() {
 
   const [isBenchmarkModalOpen, setIsBenchmarkModalOpen] = useState<boolean>(false);
   const [isDebriefModalOpen, setIsDebriefModalOpen] = useState<boolean>(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'GNC' | 'ORBITAL' | 'AI'>('GNC');
   const [isDemoGuideVisible, setIsDemoGuideVisible] = useState<boolean>(true);
   const [isHazardMode, setIsHazardMode] = useState<boolean>(false);
@@ -73,6 +75,82 @@ export function App() {
     injectHazard(hzX, hzY, 28.0, 'ROCK_FIELD');
   };
 
+  // Presenter Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      // Space: Play / Pause
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (state?.is_running) {
+          pauseMission();
+        } else {
+          startMission();
+        }
+      }
+      // V / v: Toggle 2D / 3D View
+      else if (e.key === 'v' || e.key === 'V') {
+        setViewMode((m) => (m === '2D' ? '3D' : '2D'));
+      }
+      // S / s: Toggle Shadow Race
+      else if (e.key === 's' || e.key === 'S') {
+        toggleShadowRace(!state?.shadow_race_enabled);
+      }
+      // M / m: Toggle Swarm Mode
+      else if (e.key === 'm' || e.key === 'M') {
+        toggleSwarmMode(!state?.swarm_mode_enabled);
+      }
+      // D / d: Toggle Dust Storm
+      else if (e.key === 'd' || e.key === 'D') {
+        toggleDustStorm(!state?.dust_storm?.active);
+      }
+      // O / o: Toggle Outage
+      else if (e.key === 'o' || e.key === 'O') {
+        const hasOutage = state?.satellites?.some((s) => s.is_outage);
+        if (hasOutage) {
+          restoreSatellite();
+        } else {
+          simulateOutage();
+        }
+      }
+      // R / r: Reset Mission
+      else if (e.key === 'r' || e.key === 'R') {
+        resetMission();
+      }
+      // ?: Toggle Shortcuts Modal
+      else if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+        setIsShortcutsModalOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    state?.is_running,
+    state?.shadow_race_enabled,
+    state?.swarm_mode_enabled,
+    state?.dust_storm?.active,
+    state?.satellites,
+    startMission,
+    pauseMission,
+    toggleShadowRace,
+    toggleSwarmMode,
+    toggleDustStorm,
+    simulateOutage,
+    restoreSatellite,
+    resetMission,
+  ]);
+
   const isDemoActive = Boolean(state?.demo_mission?.is_active);
 
   return (
@@ -90,6 +168,7 @@ export function App() {
         onToggleViewMode={setViewMode}
         onOpenDebrief={() => setIsDebriefModalOpen(true)}
         onExportCsv={() => exportTelemetryCsv(telemetryBuffer, (state || liveState)!)}
+        onOpenShortcuts={() => setIsShortcutsModalOpen((s) => !s)}
       />
 
       {/* 2. Main Cockpit Workspace */}
@@ -271,6 +350,12 @@ export function App() {
           onClose={() => setIsDebriefModalOpen(false)}
         />
       )}
+
+      {/* Presenter Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Radio, ShieldCheck, Activity, Compass, Cpu, AlertTriangle, PlayCircle, Bot, Swords, FileText, ChevronDown, Download, Printer } from 'lucide-react';
+import { Radio, ShieldCheck, Activity, Compass, Cpu, AlertTriangle, PlayCircle, Bot, Swords, FileText, ChevronDown, Download, Printer, HelpCircle } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
 
 interface HeaderProps {
@@ -14,6 +14,7 @@ interface HeaderProps {
   onToggleViewMode?: (mode: '2D' | '3D') => void;
   onOpenDebrief?: () => void;
   onExportCsv?: () => void;
+  onOpenShortcuts?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,6 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleViewMode,
   onOpenDebrief,
   onExportCsv,
+  onOpenShortcuts,
 }) => {
   const [utcTime, setUtcTime] = useState<string>('');
   const [isExportMenuOpen, setIsExportMenuOpen] = useState<boolean>(false);
@@ -269,6 +271,15 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
         </div>
+
+        {/* Presenter Keyboard Shortcuts Button */}
+        <button
+          onClick={onOpenShortcuts}
+          className="btn-control py-1 px-1.5 bg-[#161B22] border-[#21262D] text-[#8B949E] hover:text-[#58A6FF] rounded-[2px]"
+          title="Presenter Keyboard Shortcuts (?)"
+        >
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
 
         {/* Telemetry Stream Heartbeat */}
         <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#161B22] border border-[#21262D] rounded-[2px] text-[11px]">

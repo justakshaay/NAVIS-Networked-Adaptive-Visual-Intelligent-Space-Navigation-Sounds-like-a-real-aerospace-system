@@ -10,7 +10,7 @@
   body {
     background-color: #080A0D;
     color: #E6EDF3;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   }
 
   /* Authentic matte aerospace scrollbar */

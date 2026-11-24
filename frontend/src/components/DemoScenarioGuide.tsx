@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, CheckCircle2, ChevronRight, Play, X } from 'lucide-react';
+import { Bot, CheckCircle2, ChevronRight, Play, X, Zap } from 'lucide-react';
 import { DemoMissionStatus } from '../types/simulation';
 
 interface DemoScenarioGuideProps {
@@ -21,6 +21,7 @@ export const DemoScenarioGuide: React.FC<DemoScenarioGuideProps> = ({
     id: '01',
     name: 'Initializing Demonstration',
     desc: 'Setting up deterministic mission scenario...',
+    takeaway: 'Autonomous flight system showcase initializing.',
   };
 
   const progressPct = ((demoStatus.current_stage_idx + 1) / demoStatus.stages.length) * 100;
@@ -28,8 +29,8 @@ export const DemoScenarioGuide: React.FC<DemoScenarioGuideProps> = ({
   return (
     <div className="w-full bg-[#0F1217] border-b border-[#21262D] px-3 py-1.5 font-mono text-xs select-none">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Stage Counter */}
-        <div className="flex items-center gap-2">
+        {/* Stage Counter & Title */}
+        <div className="flex items-center gap-2 shrink-0">
           <div className="px-1.5 py-0.5 bg-[#161B22] border border-[#21262D] text-[#58A6FF] font-bold text-[11px] rounded-[2px] tabular-nums">
             STAGE {currentStage.id}
           </div>
@@ -43,14 +44,18 @@ export const DemoScenarioGuide: React.FC<DemoScenarioGuideProps> = ({
           </div>
         </div>
 
-        {/* Stage Description */}
-        <div className="text-[#8B949E] text-[11px] flex-1 max-w-xl truncate hidden md:block">
-          {currentStage.desc}
+        {/* Judge Takeaway / Stage Description */}
+        <div className="flex-1 min-w-[280px] max-w-2xl flex items-center gap-1.5 px-2 py-0.5 bg-[#161B22]/70 border border-[#21262D]/60 rounded-[2px] truncate">
+          <Zap className="w-3 h-3 text-[#D29922] shrink-0" />
+          <span className="text-[10px] font-bold text-[#D29922] uppercase shrink-0">TAKEAWAY:</span>
+          <span className="text-[#E6EDF3] text-[11px] font-medium truncate">
+            {currentStage.takeaway || currentStage.desc}
+          </span>
         </div>
 
         {/* Progress & Close */}
-        <div className="flex items-center gap-3">
-          <div className="w-28 bg-[#161B22] h-1.5 rounded-[1px] overflow-hidden border border-[#21262D]">
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="w-24 bg-[#161B22] h-1.5 rounded-[1px] overflow-hidden border border-[#21262D]">
             <div
               className="bg-[#58A6FF] h-full transition-all duration-300"
               style={{ width: `${progressPct}%` }}

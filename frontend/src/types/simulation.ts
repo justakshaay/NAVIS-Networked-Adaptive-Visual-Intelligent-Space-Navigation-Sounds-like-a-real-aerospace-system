@@ -217,6 +217,7 @@ export interface DemoMissionStatus {
     id: string;
     name: string;
     desc: string;
+    takeaway?: string;
   }>;
 }
 
