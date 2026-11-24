@@ -99,6 +99,10 @@ class SimulationEngine:
 
     def _initialize_mission(self) -> None:
         """Calculate primary route and initialize telemetry."""
+        self.last_ai_tick = -1.0
+        self._last_progress_check_time = 0.0
+        self._last_progress_pos = (self.rover.x, self.rover.y)
+        self._escape_replan_cooldown = -1.0
         initial_route = self.planner.plan_path(self.rover.start_pos, self.rover.target_pos)
         self.rover.set_path(initial_route)
         self.planner.current_route = list(initial_route)

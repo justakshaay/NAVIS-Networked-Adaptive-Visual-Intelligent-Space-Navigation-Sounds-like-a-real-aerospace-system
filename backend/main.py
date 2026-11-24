@@ -80,7 +80,7 @@ async def simulation_loop():
                 state_data = engine.get_full_state()
                 payload = json.dumps(state_data)
                 dead_sockets = set()
-                for ws in connected_websockets:
+                for ws in list(connected_websockets):
                     try:
                         await ws.send_text(payload)
                     except Exception:

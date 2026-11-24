@@ -131,6 +131,10 @@ export function useSimulation() {
 
   // Connect to WebSocket
   const connectWs = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl =
       import.meta.env.VITE_WS_URL ||
@@ -257,54 +261,69 @@ export function useSimulation() {
   const pauseMission = useCallback(() => sendCommand({ action: 'pause' }), [sendCommand]);
   const resetMission = useCallback((seed?: number) => sendCommand({ action: 'reset', seed }), [sendCommand]);
   const setSpeed = useCallback((multiplier: number) => {
-    sendCommand({ action: 'speed', multiplier });
-    fetch(`${apiBase}/api/simulation/speed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ multiplier }),
-    }).catch(() => {});
-  }, [sendCommand, apiBase]);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'speed', multiplier }));
+    } else {
+      fetch(`${apiBase}/api/simulation/speed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ multiplier }),
+      }).catch(() => {});
+    }
+  }, [apiBase]);
 
   const setMode = useCallback((mode: 'MODE_A' | 'MODE_B' | 'MODE_C') => {
-    sendCommand({ action: 'mode', mode });
-    fetch(`${apiBase}/api/simulation/mode`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode }),
-    }).catch(() => {});
-  }, [sendCommand, apiBase]);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'mode', mode }));
+    } else {
+      fetch(`${apiBase}/api/simulation/mode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      }).catch(() => {});
+    }
+  }, [apiBase]);
 
   const simulateOutage = useCallback(() => sendCommand({ action: 'outage' }), [sendCommand]);
   const restoreSatellite = useCallback(() => sendCommand({ action: 'restore' }), [sendCommand]);
 
   const injectHazard = useCallback((x: number, y: number, radius = 28.0, type = 'ROCK_FIELD') => {
-    sendCommand({ action: 'inject_hazard', x, y, radius, type });
-    fetch(`${apiBase}/api/hazard/inject`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ x, y, radius, hazard_type: type }),
-    }).catch(() => {});
-  }, [sendCommand, apiBase]);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'inject_hazard', x, y, radius, type }));
+    } else {
+      fetch(`${apiBase}/api/hazard/inject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x, y, radius, hazard_type: type }),
+      }).catch(() => {});
+    }
+  }, [apiBase]);
 
   const runDemo = useCallback(() => sendCommand({ action: 'demo' }), [sendCommand]);
 
   const toggleShadowRace = useCallback((enabled: boolean) => {
-    sendCommand({ action: 'toggle_shadow_race', enabled });
-    fetch(`${apiBase}/api/simulation/shadow_race`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
-    }).catch(() => {});
-  }, [sendCommand, apiBase]);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'toggle_shadow_race', enabled }));
+    } else {
+      fetch(`${apiBase}/api/simulation/shadow_race`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      }).catch(() => {});
+    }
+  }, [apiBase]);
 
   const toggleSwarmMode = useCallback((enabled: boolean) => {
-    sendCommand({ action: 'toggle_swarm_mode', enabled });
-    fetch(`${apiBase}/api/simulation/swarm_mode`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
-    }).catch(() => {});
-  }, [sendCommand, apiBase]);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'toggle_swarm_mode', enabled }));
+    } else {
+      fetch(`${apiBase}/api/simulation/swarm_mode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      }).catch(() => {});
+    }
+  }, [apiBase]);
 
   const setTerrainPreset = useCallback((preset: 'procedural' | 'jezero_crater') => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -325,13 +344,16 @@ export function useSimulation() {
   }, [apiBase, processNewSnapshot]);
 
   const toggleDustStorm = useCallback((enabled: boolean) => {
-    sendCommand({ action: 'toggle_dust_storm', enabled });
-    fetch(`${apiBase}/api/simulation/dust_storm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
-    }).catch(() => {});
-  }, [sendCommand, apiBase]);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'toggle_dust_storm', enabled }));
+    } else {
+      fetch(`${apiBase}/api/simulation/dust_storm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      }).catch(() => {});
+    }
+  }, [apiBase]);
 
   const runBenchmark = useCallback(async (seed = 42) => {
     setIsBenchmarking(true);

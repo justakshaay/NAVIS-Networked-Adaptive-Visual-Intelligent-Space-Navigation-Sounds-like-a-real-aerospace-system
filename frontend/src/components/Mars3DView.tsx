@@ -84,6 +84,21 @@ const MartianTerrain: React.FC<TerrainMeshProps> = ({
     return { geometry: geom, wireGeometry: wire };
   }, [width, height, terrainPreset, terrainVersion, grid?.length]);
 
+  const boundaryBox = useMemo(() => new THREE.BoxGeometry(width, 1, height), [width, height]);
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      wireGeometry.dispose();
+    };
+  }, [geometry, wireGeometry]);
+
+  useEffect(() => {
+    return () => {
+      boundaryBox.dispose();
+    };
+  }, [boundaryBox]);
+
   return (
     <group position={[width / 2, 0, height / 2]}>
       {/* Matte Martian Regolith Surface */}
@@ -108,7 +123,7 @@ const MartianTerrain: React.FC<TerrainMeshProps> = ({
 
       {/* Perimeter Hairline Boundary Frame */}
       <lineSegments position={[0, 0.2, 0]}>
-        <edgesGeometry args={[new THREE.BoxGeometry(width, 1, height)]} />
+        <edgesGeometry args={[boundaryBox]} />
         <lineBasicMaterial color="#21262D" />
       </lineSegments>
     </group>
