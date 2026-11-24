@@ -305,6 +305,12 @@ class SimulationEngine:
         elif self.swarm_mode_enabled:
             self.active_mode = NavigationMode.MODE_C
             self._initialize_swarm_rovers()
+        else:
+            self.shadow_rover = None
+            self.shadow_sensors = None
+            self.shadow_ekf = None
+            self.shadow_trail = []
+            self.swarm_rovers = {}
 
         self.add_log("CONTROL", "Mission Simulation Reset to Origin.", "info")
 
@@ -365,8 +371,7 @@ class SimulationEngine:
         self.planner = AStarPlanner(self.terrain)
         self.hazard_detector = VisualHazardDetector(self.terrain)
         self.reset()
-        if self.shadow_race_enabled:
-            self._initialize_shadow_rover()
+        self.is_running = True
         self.add_log("TERRAIN", f"Martian Surface Preset Switched to: {preset.upper().replace('_', ' ')}", "warning")
 
     def toggle_dust_storm(self, enabled: Optional[bool] = None) -> None:
@@ -817,10 +822,10 @@ class SimulationEngine:
             "logs": self.logs[-40:],  # last 40 entries
             "terrain_summary": {
                 "preset": self.terrain_preset,
-                "width_m": self.terrain.width_m,
-                "height_m": self.terrain.height_m,
-                "start_pos": list(self.terrain.start_pos),
-                "target_pos": list(self.terrain.target_pos),
+                "width_m": float(self.terrain.width_m),
+                "height_m": float(self.terrain.height_m),
+                "start_pos": [float(self.terrain.start_pos[0]), float(self.terrain.start_pos[1])],
+                "target_pos": [float(self.terrain.target_pos[0]), float(self.terrain.target_pos[1])],
                 "injected_hazards": self.terrain.injected_hazards,
                 "craters": self.terrain.craters,
                 "rock_fields": self.terrain.rock_fields,

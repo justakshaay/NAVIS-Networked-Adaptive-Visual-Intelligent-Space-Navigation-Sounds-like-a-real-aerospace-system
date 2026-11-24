@@ -194,15 +194,15 @@ class MarsTerrain:
         self.craters = []
         num_craters = 6
         for _ in range(num_craters):
-            cx = np.random.uniform(100.0, self.width_m - 100.0)
-            cy = np.random.uniform(100.0, self.height_m - 100.0)
+            cx = float(np.random.uniform(100.0, self.width_m - 100.0))
+            cy = float(np.random.uniform(100.0, self.height_m - 100.0))
             if math.hypot(cx - self.start_pos[0], cy - self.start_pos[1]) < 80:
                 continue
             if math.hypot(cx - self.target_pos[0], cy - self.target_pos[1]) < 80:
                 continue
 
-            radius = np.random.uniform(25.0, 55.0)
-            depth = np.random.uniform(12.0, 25.0)
+            radius = float(np.random.uniform(25.0, 55.0))
+            depth = float(np.random.uniform(12.0, 25.0))
             self.craters.append({"x": cx, "y": cy, "radius": radius, "depth": depth})
 
             dist = np.hypot(X - cx, Y - cy)
@@ -279,9 +279,9 @@ class MarsTerrain:
             self.rock_fields = []
             num_rock_fields = 7
             for _ in range(num_rock_fields):
-                rx = np.random.uniform(80.0, self.width_m - 80.0)
-                ry = np.random.uniform(80.0, self.height_m - 80.0)
-                rad = np.random.uniform(20.0, 45.0)
+                rx = float(np.random.uniform(80.0, self.width_m - 80.0))
+                ry = float(np.random.uniform(80.0, self.height_m - 80.0))
+                rad = float(np.random.uniform(20.0, 45.0))
                 self.rock_fields.append({"x": rx, "y": ry, "radius": rad})
 
         # Base Costs
@@ -398,8 +398,8 @@ class MarsTerrain:
             "height_m": self.height_m,
             "grid_res": self.grid_res,
             "cell_size": self.cell_size,
-            "start_pos": list(self.start_pos),
-            "target_pos": list(self.target_pos),
+            "start_pos": [float(self.start_pos[0]), float(self.start_pos[1])],
+            "target_pos": [float(self.target_pos[0]), float(self.target_pos[1])],
             "craters": self.craters,
             "rock_fields": self.rock_fields,
             "injected_hazards": self.injected_hazards,

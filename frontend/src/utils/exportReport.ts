@@ -41,21 +41,22 @@ export function generateDebriefData(
   let wasOutage = false;
 
   for (const f of frames) {
-    const rx = f.rover.x;
-    const ry = f.rover.y;
-    const ex = f.ekf.est_x;
-    const ey = f.ekf.est_y;
+    const rx = f.rover?.x ?? 0;
+    const ry = f.rover?.y ?? 0;
+    const ex = f.ekf?.est_x ?? rx;
+    const ey = f.ekf?.est_y ?? ry;
     const err = Math.hypot(rx - ex, ry - ey);
 
     totalErr += err;
     if (err > peakErr) peakErr = err;
 
-    totalUncert += f.ekf.uncertainty_m || 0;
+    totalUncert += f.ekf?.uncertainty_m ?? 0.5;
 
-    const hasPnt = f.ekf.pnt_active || f.satellites.some((s) => s.is_visible && s.pnt_available);
+    const sats = f.satellites || [];
+    const hasPnt = f.ekf?.pnt_active || sats.some((s) => s.is_visible && s.pnt_available);
     if (hasPnt) pntFrames++;
 
-    const isOutage = f.satellites.some((s) => s.is_outage) || f.ekf.fallback_active;
+    const isOutage = sats.some((s) => s.is_outage) || Boolean(f.ekf?.fallback_active);
     if (isOutage && !wasOutage) {
       outageCounter++;
     }
@@ -63,11 +64,11 @@ export function generateDebriefData(
   }
 
   const hazardsAvoided =
-    (currentState.terrain_summary.injected_hazards?.length ?? 0) +
+    (currentState.terrain_summary?.injected_hazards?.length ?? 0) +
     (currentState.hazard_alert?.detected_count ?? 0);
 
   return {
-    missionDuration_s: currentState.sim_time,
+    missionDuration_s: currentState.sim_time || 0,
     totalFrames,
     activeMode: currentState.active_mode,
     modeName: currentState.mode_meta?.name || currentState.active_mode,
@@ -78,8 +79,8 @@ export function generateDebriefData(
     satAvailability_pct: totalFrames > 0 ? Math.round((pntFrames / totalFrames) * 100) : 100,
     outageEventsCount: outageCounter,
     hazardsAvoided,
-    totalDistance_m: currentState.rover.total_distance || 0,
-    batteryRemaining_pct: currentState.rover.battery_pct,
+    totalDistance_m: currentState.rover?.total_distance || 0,
+    batteryRemaining_pct: currentState.rover?.battery_pct ?? 100,
     decisionLogs: (currentState.logs || []).slice(-30),
   };
 }
@@ -112,17 +113,19 @@ export function exportTelemetryCsv(buffer: SimulationFullState[], currentState: 
   ];
 
   const rows = frames.map((f) => {
-    const rx = f.rover.x;
-    const ry = f.rover.y;
-    const ex = f.ekf.est_x;
-    const ey = f.ekf.est_y;
+    const rx = f.rover?.x ?? 0;
+    const ry = f.rover?.y ?? 0;
+    const ex = f.ekf?.est_x ?? rx;
+    const ey = f.ekf?.est_y ?? ry;
     const err = Math.hypot(rx - ex, ry - ey);
 
-    const metMin = Math.floor(f.sim_time / 60);
-    const metSec = Math.floor(f.sim_time % 60);
+    const simTime = f.sim_time || 0;
+    const metMin = Math.floor(simTime / 60);
+    const metSec = Math.floor(simTime % 60);
     const metClock = `MET+${String(metMin).padStart(2, '0')}:${String(metSec).padStart(2, '0')}`;
 
-    const visSats = f.satellites.filter((s) => s.is_visible && !s.is_outage).length;
+    const sats = f.satellites || [];
+    const visSats = sats.filter((s) => s.is_visible && !s.is_outage).length;
     const stormStatus = f.dust_storm?.active
       ? f.dust_storm.rover_in_storm
         ? 'IN_STORM'
@@ -130,11 +133,11 @@ export function exportTelemetryCsv(buffer: SimulationFullState[], currentState: 
       : 'NONE';
 
     const hzCount =
-      (f.terrain_summary.injected_hazards?.length ?? 0) +
+      (f.terrain_summary?.injected_hazards?.length ?? 0) +
       (f.hazard_alert?.detected_count ?? 0);
 
     return [
-      f.sim_time.toFixed(2),
+      simTime.toFixed(2),
       metClock,
       f.active_mode,
       f.swarm_mode_enabled ? 'SWARM_3X' : 'NAVIS-01',
@@ -143,13 +146,13 @@ export function exportTelemetryCsv(buffer: SimulationFullState[], currentState: 
       ex.toFixed(2),
       ey.toFixed(2),
       err.toFixed(3),
-      f.ekf.uncertainty_m.toFixed(3),
-      f.rover.speed.toFixed(2),
-      f.rover.heading_deg.toFixed(1),
-      f.rover.battery_pct.toFixed(1),
-      f.rover.wheel_slip.toFixed(3),
+      (f.ekf?.uncertainty_m ?? 0.5).toFixed(3),
+      (f.rover?.speed ?? 0).toFixed(2),
+      (f.rover?.heading_deg ?? 0).toFixed(1),
+      (f.rover?.battery_pct ?? 100).toFixed(1),
+      (f.rover?.wheel_slip ?? 0).toFixed(3),
       visSats,
-      f.ekf.pnt_active ? 'TRUE' : 'FALSE',
+      f.ekf?.pnt_active ? 'TRUE' : 'FALSE',
       stormStatus,
       hzCount,
     ].join(',');

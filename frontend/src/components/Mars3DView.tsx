@@ -453,22 +453,22 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
 
   // Trajectory Lines for primary rover
   const breadcrumbPoints: [number, number, number][] = useMemo(() => {
-    const hist = state?.routes.breadcrumb_history || [];
+    const hist = state?.routes?.breadcrumb_history || [];
     if (hist.length < 2) return [];
     return hist.map((p) => [p.x, getElevation(p.x, p.y) + 0.4, p.y]);
-  }, [state?.routes.breadcrumb_history, getElevation]);
+  }, [state?.routes?.breadcrumb_history, getElevation]);
 
   const plannedRoutePoints: [number, number, number][] = useMemo(() => {
-    const pts = state?.routes.current_planned || [];
+    const pts = state?.routes?.current_planned || [];
     if (pts.length < 2) return [];
     return pts.map((p) => [p[0], getElevation(p[0], p[1]) + 0.3, p[1]]);
-  }, [state?.routes.current_planned, getElevation]);
+  }, [state?.routes?.current_planned, getElevation]);
 
   const mlPredictionPoints: [number, number, number][] = useMemo(() => {
-    const pts = state?.trajectory_prediction.predicted_trajectory || [];
+    const pts = state?.trajectory_prediction?.predicted_trajectory || [];
     if (pts.length < 2) return [];
     return pts.map((p) => [p.x, getElevation(p.x, p.y) + 0.5, p.y]);
-  }, [state?.trajectory_prediction.predicted_trajectory, getElevation]);
+  }, [state?.trajectory_prediction?.predicted_trajectory, getElevation]);
 
   // Target rover position lookup for satellites
   const getRoverPosForSat = (sat: SatelliteState): [number, number, number] => {
@@ -621,7 +621,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
         )}
 
         {/* 6. Dynamic Injected Hazards */}
-        {state?.terrain_summary.injected_hazards.map((hz) => {
+        {state?.terrain_summary?.injected_hazards?.map((hz) => {
           const hzElev = getElevation(hz.x, hz.y);
           return (
             <group key={hz.id} position={[hz.x, hzElev, hz.y]}>
@@ -639,7 +639,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
         })}
 
         {/* 7. Dynamic Moving Dust Storm Zone */}
-        {state?.dust_storm.active && (
+        {state?.dust_storm?.active && (
           <group position={[state.dust_storm.x, 25, state.dust_storm.y]}>
             {/* Amber swirl dome */}
             <mesh>
@@ -660,7 +660,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
         )}
 
         {/* 8. Science Target Beacon */}
-        {state && (
+        {state?.terrain_summary?.target_pos && (
           <group position={[state.terrain_summary.target_pos[0], getElevation(state.terrain_summary.target_pos[0], state.terrain_summary.target_pos[1]), state.terrain_summary.target_pos[1]]}>
             <mesh position={[0, 0.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
               <ringGeometry args={[8, 12, 32]} />
@@ -675,7 +675,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
         )}
 
         {/* 9. Orbital Constellation & RF Beams */}
-        {state?.satellites.map((sat) => (
+        {state?.satellites?.map((sat) => (
           <Satellite3D
             key={sat.sat_id}
             sat={sat}

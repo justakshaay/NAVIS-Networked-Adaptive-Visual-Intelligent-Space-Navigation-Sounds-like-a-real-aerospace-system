@@ -39,6 +39,15 @@ export function useSimulation() {
     const buf = telemetryBufferRef.current;
     const prev = buf.length > 0 ? buf[buf.length - 1] : null;
 
+    // Detect simulation reset (sim_time jumped backwards or reset to 0)
+    if (prev && (data.sim_time < prev.sim_time || (data.sim_time === 0 && prev.sim_time > 0))) {
+      buf.length = 0;
+      setEvents([]);
+      setIsReplaying(false);
+      setReplayIndex(0);
+      setIsReplayPlaying(false);
+    }
+
     buf.push(data);
     if (buf.length > 1200) {
       buf.shift();

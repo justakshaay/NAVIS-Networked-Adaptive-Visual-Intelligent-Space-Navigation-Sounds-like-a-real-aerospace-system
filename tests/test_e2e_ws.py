@@ -163,6 +163,17 @@ async def test_e2e_websocket():
         await ws.send(json.dumps({"action": "toggle_swarm_mode", "enabled": False}))
         print("[OK] Toggled Swarm Mode OFF.")
 
+        # 10. Test Reset to Origin
+        await ws.send(json.dumps({"action": "reset"}))
+        for _ in range(5):
+            msg = await ws.recv()
+            state = json.loads(msg)
+
+        assert state["sim_time"] == 0.0 or state["sim_time"] < 1.0
+        assert state["shadow_rover"] is None
+        assert len(state["swarm_rovers"]) == 0
+        print("[OK] Reset verified: telemetry state cleanly returned to origin.")
+
     print("\n[SUCCESS] E2E WEBSOCKET & SIMULATION CONTROLS FULLY VERIFIED!")
 
 
