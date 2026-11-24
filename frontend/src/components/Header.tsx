@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileText, ChevronDown, Download, Printer, HelpCircle } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
+import { Tooltip } from './Tooltip';
 
 interface HeaderProps {
   state: SimulationFullState | null;
@@ -74,54 +75,66 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="h-4 w-px bg-[#222226]" />
 
         {/* Map Preset Segmented Toggle */}
-        <div className="hidden sm:flex items-center bg-[#09090B] border border-[#222226] rounded-md p-0.5 text-xs">
-          <button
-            onClick={() => onSetTerrainPreset?.('procedural')}
-            className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
-              (state?.terrain_preset || 'procedural') === 'procedural'
-                ? 'bg-[#F4F4F5] text-[#09090B]'
-                : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
-            }`}
-            title="Procedural Martian Plains"
-          >
-            Procedural
-          </button>
-          <button
-            onClick={() => onSetTerrainPreset?.('jezero_crater')}
-            className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
-              state?.terrain_preset === 'jezero_crater'
-                ? 'bg-[#F4F4F5] text-[#09090B]'
-                : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
-            }`}
-            title="NASA Jezero Crater Western River Delta"
-          >
-            Jezero
-          </button>
-        </div>
+        <Tooltip
+          title="Terrain Preset"
+          description="Switch between Procedural Sector 7 and real Jezero Crater elevation data."
+          position="bottom"
+          align="left"
+        >
+          <div className="hidden sm:flex items-center bg-[#09090B] border border-[#222226] rounded-md p-0.5 text-xs">
+            <button
+              onClick={() => onSetTerrainPreset?.('procedural')}
+              className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
+                (state?.terrain_preset || 'procedural') === 'procedural'
+                  ? 'bg-[#F4F4F5] text-[#09090B]'
+                  : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
+              }`}
+            >
+              Procedural
+            </button>
+            <button
+              onClick={() => onSetTerrainPreset?.('jezero_crater')}
+              className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
+                state?.terrain_preset === 'jezero_crater'
+                  ? 'bg-[#F4F4F5] text-[#09090B]'
+                  : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
+              }`}
+            >
+              Jezero Crater
+            </button>
+          </div>
+        </Tooltip>
 
         {/* 2D / 3D View Segmented Toggle */}
-        <div className="flex items-center bg-[#09090B] border border-[#222226] rounded-md p-0.5 text-xs">
-          <button
-            onClick={() => onToggleViewMode?.('2D')}
-            className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
-              viewMode === '2D'
-                ? 'bg-[#F4F4F5] text-[#09090B]'
-                : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
-            }`}
-          >
-            2D
-          </button>
-          <button
-            onClick={() => onToggleViewMode?.('3D')}
-            className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
-              viewMode === '3D'
-                ? 'bg-[#F4F4F5] text-[#09090B]'
-                : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
-            }`}
-          >
-            3D
-          </button>
-        </div>
+        <Tooltip
+          title="Viewport Mode (V)"
+          description="Toggle between the 2D tactical grid map and interactive 3D Mars orbital scene."
+          position="bottom"
+          align="left"
+        >
+          <div className="flex items-center bg-[#09090B] border border-[#222226] rounded-md p-0.5 text-xs">
+            <button
+              onClick={() => onToggleViewMode?.('2D')}
+              className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
+                viewMode === '2D'
+                  ? 'bg-[#F4F4F5] text-[#09090B]'
+                  : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
+              }`}
+            >
+              2D
+            </button>
+            <button
+              onClick={() => onToggleViewMode?.('3D')}
+              className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
+                viewMode === '3D'
+                  ? 'bg-[#F4F4F5] text-[#09090B]'
+                  : 'text-[#A1A1AA] hover:text-[#F4F4F5]'
+              }`}
+            >
+              3D
+            </button>
+          </div>
+        </Tooltip>
       </div>
 
       {/* Center: Minimal Inline Status + MET Timer */}
@@ -148,35 +161,36 @@ export const Header: React.FC<HeaderProps> = ({
         <span className="font-mono text-[#71717A] tabular-nums">{metString}</span>
       </div>
 
-      {/* Right: Clean Ghost/Outline Actions */}
+      {/* Right: Core Engineering Tools & Subordinate Optional Pitch Demo */}
       <div className="flex items-center gap-2">
-        {isDemoActive ? (
-          <button
-            onClick={onToggleDemoGuide}
-            className="btn-control bg-[#1C1C21] text-[#F4F4F5] border-[#3F3F46]"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Demo</span>
+        <Tooltip
+          title="Benchmark Modes"
+          description="Run head-to-head comparison metrics across Mode A (DR), Mode B (EKF), and Mode C (NAVIS AI)."
+          position="bottom"
+          align="right"
+        >
+          <button onClick={onOpenBenchmark} className="btn-control text-[#F4F4F5]">
+            <span>Benchmark</span>
           </button>
-        ) : onStartDemo ? (
-          <button onClick={onStartDemo} className="btn-control">
-            <span>Demo</span>
-          </button>
-        ) : null}
+        </Tooltip>
 
-        <button onClick={onOpenBenchmark} className="btn-control">
-          <span>Benchmark</span>
-        </button>
-
-        {/* Export Dropdown */}
+        {/* Export Report Dropdown */}
         <div className="relative" ref={exportMenuRef}>
-          <button
-            onClick={() => setIsExportMenuOpen((o) => !o)}
-            className="btn-control"
+          <Tooltip
+            title="Export Report"
+            description="Generate a printable flight debrief summary or download raw mission telemetry CSV."
+            position="bottom"
+            align="right"
+            disabled={isExportMenuOpen}
           >
-            <span>Export</span>
-            <ChevronDown className="w-3 h-3 text-[#71717A]" />
-          </button>
+            <button
+              onClick={() => setIsExportMenuOpen((o) => !o)}
+              className="btn-control text-[#F4F4F5]"
+            >
+              <span>Export Report</span>
+              <ChevronDown className="w-3 h-3 text-[#71717A]" />
+            </button>
+          </Tooltip>
 
           {isExportMenuOpen && (
             <div className="absolute right-0 top-9 z-50 w-52 bg-[#0C0C0E] border border-[#222226] rounded-md shadow-2xl p-1 text-xs space-y-0.5">
@@ -208,14 +222,54 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        <button
-          onClick={onOpenShortcuts}
-          className="btn-control px-2"
+        <div className="h-4 w-px bg-[#222226] hidden sm:block" />
+
+        {/* Subordinate Optional Presenter Demo Trigger */}
+        {isDemoActive ? (
+          <Tooltip
+            title="Pitch Demo Active"
+            description="Toggle the optional automated walkthrough banner for presenters."
+            position="bottom"
+            align="right"
+          >
+            <button
+              onClick={onToggleDemoGuide}
+              className="h-7 px-2 rounded-md text-[11px] font-medium text-[#A1A1AA] hover:text-[#F4F4F5] hover:bg-[#141417] flex items-center gap-1.5 transition-colors"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Pitch Demo</span>
+            </button>
+          </Tooltip>
+        ) : onStartDemo ? (
+          <Tooltip
+            title="Pitch Demo"
+            description="Optional scripted walkthrough cycling through Jezero, outages, storms, and swarm mode."
+            position="bottom"
+            align="right"
+          >
+            <button
+              onClick={onStartDemo}
+              className="h-7 px-2 rounded-md text-[11px] font-medium text-[#71717A] hover:text-[#A1A1AA] hover:bg-[#141417] transition-colors"
+            >
+              <span>Pitch Demo</span>
+            </button>
+          </Tooltip>
+        ) : null}
+
+        <Tooltip
           title="Keyboard Shortcuts (?)"
-          aria-label="Keyboard Shortcuts"
+          description="View hotkeys for playback, camera toggle, faults, and reset."
+          position="bottom"
+          align="right"
         >
-          <HelpCircle className="w-3.5 h-3.5" />
-        </button>
+          <button
+            onClick={onOpenShortcuts}
+            className="h-7 px-2 rounded-md text-[#71717A] hover:text-[#F4F4F5] hover:bg-[#141417] flex items-center justify-center transition-colors"
+            aria-label="Keyboard Shortcuts"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
       </div>
     </header>
   );

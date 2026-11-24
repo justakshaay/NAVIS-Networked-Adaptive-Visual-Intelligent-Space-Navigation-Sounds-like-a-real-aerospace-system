@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, CheckCircle2, ChevronRight, Play, X, Zap } from 'lucide-react';
+import { X } from 'lucide-react';
 import { DemoMissionStatus } from '../types/simulation';
 
 interface DemoScenarioGuideProps {
@@ -10,7 +10,6 @@ interface DemoScenarioGuideProps {
 
 export const DemoScenarioGuide: React.FC<DemoScenarioGuideProps> = ({
   demoStatus,
-  onStartDemo,
   onClose,
 }) => {
   if (!demoStatus.is_active) {
@@ -19,7 +18,7 @@ export const DemoScenarioGuide: React.FC<DemoScenarioGuideProps> = ({
 
   const currentStage = demoStatus.stages[demoStatus.current_stage_idx] || {
     id: '01',
-    name: 'Initializing Demonstration',
+    name: 'Initializing Walkthrough',
     desc: 'Setting up deterministic mission scenario...',
     takeaway: 'Autonomous flight system showcase initializing.',
   };
@@ -27,48 +26,39 @@ export const DemoScenarioGuide: React.FC<DemoScenarioGuideProps> = ({
   const progressPct = ((demoStatus.current_stage_idx + 1) / demoStatus.stages.length) * 100;
 
   return (
-    <div className="w-full bg-[#0F1217] border-b border-[#21262D] px-3 py-1.5 font-mono text-xs select-none">
+    <div className="w-full bg-[#0C0C0E] border-b border-[#222226] px-4 py-1.5 text-xs select-none">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Stage Counter & Title */}
         <div className="flex items-center gap-2 shrink-0">
-          <div className="px-1.5 py-0.5 bg-[#161B22] border border-[#21262D] text-[#58A6FF] font-bold text-[11px] rounded-[2px] tabular-nums">
+          <span className="font-mono text-[11px] text-[#71717A] tabular-nums">
             STAGE {currentStage.id}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#E6EDF3] text-xs">
-              {currentStage.name}
-            </span>
-            <span className="text-[10px] text-[#8B949E] tabular-nums">
-              (T+{demoStatus.demo_time_s.toFixed(1)}s)
-            </span>
-          </div>
-        </div>
-
-        {/* Judge Takeaway / Stage Description */}
-        <div className="flex-1 min-w-[280px] max-w-2xl flex items-center gap-1.5 px-2 py-0.5 bg-[#161B22]/70 border border-[#21262D]/60 rounded-[2px] truncate">
-          <Zap className="w-3 h-3 text-[#D29922] shrink-0" />
-          <span className="text-[10px] font-bold text-[#D29922] uppercase shrink-0">TAKEAWAY:</span>
-          <span className="text-[#E6EDF3] text-[11px] font-medium truncate">
-            {currentStage.takeaway || currentStage.desc}
+          </span>
+          <span className="font-medium text-[#F4F4F5]">
+            {currentStage.name}
+          </span>
+          <span className="font-mono text-[11px] text-[#71717A] tabular-nums">
+            T+{demoStatus.demo_time_s.toFixed(1)}s
           </span>
         </div>
 
-        {/* Progress & Close */}
+        <div className="flex-1 min-w-[240px] max-w-2xl text-[#A1A1AA] truncate">
+          {currentStage.takeaway || currentStage.desc}
+        </div>
+
         <div className="flex items-center gap-3 shrink-0">
-          <div className="w-24 bg-[#161B22] h-1.5 rounded-[1px] overflow-hidden border border-[#21262D]">
+          <div className="w-20 bg-[#1C1C21] h-1 rounded-full overflow-hidden">
             <div
-              className="bg-[#58A6FF] h-full transition-all duration-300"
+              className="bg-[#F4F4F5] h-full transition-all duration-300"
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <span className="text-[11px] text-[#58A6FF] font-bold tabular-nums">
+          <span className="font-mono text-[11px] text-[#A1A1AA] tabular-nums">
             {progressPct.toFixed(0)}%
           </span>
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 rounded-[2px] text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#161B22]"
-              title="Hide Demo Banner"
+              className="p-1 rounded hover:bg-[#141417] text-[#71717A] hover:text-[#F4F4F5]"
+              title="Dismiss walkthrough strip"
             >
               <X className="w-3.5 h-3.5" />
             </button>
