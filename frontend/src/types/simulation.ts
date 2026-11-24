@@ -35,9 +35,13 @@ export interface ShadowRoverState {
 }
 
 export interface SwarmRoverState {
+  id?: string;
   rover_id: string;
+  unit_tag?: string;
   callsign: string;
   role: string;
+  status?: string;
+  battery?: number;
   color: string;
   priority: number;
   true_pos: [number, number];
@@ -52,6 +56,15 @@ export interface SwarmRoverState {
   path: Array<[number, number]>;
   trail: Array<[number, number]>;
   mission_status: string;
+}
+
+export interface SwarmMeshLink {
+  from_id: string;
+  to_id: string;
+  from_pos: [number, number];
+  to_pos: [number, number];
+  distance_m: number;
+  signal_pct: number;
 }
 
 export interface DustStormState {
@@ -231,6 +244,8 @@ export interface SimulationFullState {
   shadow_rover?: ShadowRoverState | null;
   swarm_mode_enabled: boolean;
   swarm_rovers?: SwarmRoverState[];
+  swarm_links?: SwarmMeshLink[];
+  swarm_shared_hazards?: number;
   terrain_preset: 'procedural' | 'jezero_crater';
   dust_storm: DustStormState;
   mode_meta: {

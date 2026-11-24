@@ -208,6 +208,22 @@ export function App() {
               </div>
             )}
 
+            {/* Compact Monochrome Swarm Telemetry Pill (shown only when Swarm Mode is active) */}
+            {state?.swarm_mode_enabled && !isHazardMode && (connected || liveState) && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 px-3 py-1 rounded-md bg-[#0C0C0E]/85 backdrop-blur-md border border-[#222226] font-mono text-[11px] text-[#A1A1AA] shadow-lg pointer-events-none whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span className="text-[#F4F4F5] font-medium">Swarm Mesh</span>
+                <span className="text-[#222226]">·</span>
+                <span className="tabular-nums">{state.swarm_rovers?.length ?? 0} Units</span>
+                <span className="text-[#222226]">·</span>
+                <span className="tabular-nums">{state.swarm_links?.length ?? 0} Links</span>
+                <span className="text-[#222226]">·</span>
+                <span className="tabular-nums">
+                  {state.swarm_shared_hazards ?? 0} Shared Hazards
+                </span>
+              </div>
+            )}
+
             {viewMode === '2D' ? (
               <MarsCanvas
                 state={state}

@@ -77,6 +77,9 @@ class SimulationEngine:
         # Multi-Rover Swarm Subsystem (Alpha, Beta, Gamma)
         self.swarm_mode_enabled: bool = False
         self.swarm_rovers: Dict[str, Any] = {}
+        self.swarm_shared_hazard_ids: set[str] = set()
+        self.swarm_shared_hazards_count: int = 0
+        self.swarm_mesh_range_m: float = 240.0
 
         # AI Decision & Event Log
         self.logs: List[Dict[str, Any]] = []
@@ -179,10 +182,20 @@ class SimulationEngine:
         self.shadow_collided_hazard_ids = set()
 
     def _initialize_swarm_rovers(self) -> None:
-        """Instantiate 3 multi-rover swarm members with distinct paths, roles, and telemetry."""
-        # 1. Alpha / Scout (fast, NE target)
-        r1_start = (50.0, 50.0)
-        r1_target = (540.0, 530.0)
+        """Instantiate 3 coordinated multi-rover swarm units in staggered wedge formation."""
+        self.swarm_shared_hazard_ids = set()
+        self.swarm_shared_hazards_count = 0
+
+        sx, sy = self.terrain.start_pos
+        tx, ty = self.terrain.target_pos
+        w_lim, h_lim = self.terrain.width_m - 20.0, self.terrain.height_m - 20.0
+
+        def clamp_pt(px: float, py: float) -> Tuple[float, float]:
+            return (float(max(20.0, min(w_lim, px))), float(max(20.0, min(h_lim, py))))
+
+        # 1. R1 Alpha / LEAD (primary scout on nominal route)
+        r1_start = clamp_pt(sx, sy)
+        r1_target = clamp_pt(tx, ty)
         p1 = self.planner.plan_path(r1_start, r1_target)
         rover1 = MarsRover(r1_start[0], r1_start[1], r1_target[0], r1_target[1], max_speed=2.2, max_accel=0.9)
         rover1.set_path(list(p1))
@@ -190,21 +203,21 @@ class SimulationEngine:
         s1.reset(r1_start, rover1.heading)
         ekf1 = NAVIS_EKF(r1_start[0], r1_start[1], rover1.heading)
 
-        # 2. Beta / Sampler (medium speed, central terrain)
-        r2_start = (60.0, 220.0)
-        r2_target = (480.0, 260.0)
+        # 2. R2 Beta / FLANK-L (staggered left flank offset)
+        r2_start = clamp_pt(sx - 12.0, sy + 44.0)
+        r2_target = clamp_pt(tx - 38.0, ty + 32.0)
         p2 = self.planner.plan_path(r2_start, r2_target)
-        rover2 = MarsRover(r2_start[0], r2_start[1], r2_target[0], r2_target[1], max_speed=1.5, max_accel=0.6)
+        rover2 = MarsRover(r2_start[0], r2_start[1], r2_target[0], r2_target[1], max_speed=2.05, max_accel=0.8)
         rover2.set_path(list(p2))
         s2 = SensorSuite(seed=self.seed + 202)
         s2.reset(r2_start, rover2.heading)
         ekf2 = NAVIS_EKF(r2_start[0], r2_start[1], rover2.heading)
 
-        # 3. Gamma / Hauler (heavy payload, SE sector)
-        r3_start = (80.0, 420.0)
-        r3_target = (520.0, 120.0)
+        # 3. R3 Gamma / FLANK-R (staggered right flank / relay offset)
+        r3_start = clamp_pt(sx + 44.0, sy - 12.0)
+        r3_target = clamp_pt(tx + 32.0, ty - 38.0)
         p3 = self.planner.plan_path(r3_start, r3_target)
-        rover3 = MarsRover(r3_start[0], r3_start[1], r3_target[0], r3_target[1], max_speed=1.1, max_accel=0.4)
+        rover3 = MarsRover(r3_start[0], r3_start[1], r3_target[0], r3_target[1], max_speed=1.95, max_accel=0.75)
         rover3.set_path(list(p3))
         s3 = SensorSuite(seed=self.seed + 203)
         s3.reset(r3_start, rover3.heading)
@@ -213,8 +226,10 @@ class SimulationEngine:
         self.swarm_rovers = {
             "ROVER-1": {
                 "rover_id": "ROVER-1",
+                "unit_tag": "R1",
                 "callsign": "Alpha",
-                "role": "Scout",
+                "role": "LEAD",
+                "target_offset": (0.0, 0.0),
                 "color": "#58A6FF",
                 "priority": 1.25,
                 "rover": rover1,
@@ -230,8 +245,10 @@ class SimulationEngine:
             },
             "ROVER-2": {
                 "rover_id": "ROVER-2",
+                "unit_tag": "R2",
                 "callsign": "Beta",
-                "role": "Sampler",
+                "role": "FLANK-L",
+                "target_offset": (-38.0, 32.0),
                 "color": "#2EA043",
                 "priority": 1.0,
                 "rover": rover2,
@@ -247,8 +264,10 @@ class SimulationEngine:
             },
             "ROVER-3": {
                 "rover_id": "ROVER-3",
+                "unit_tag": "R3",
                 "callsign": "Gamma",
-                "role": "Hauler",
+                "role": "FLANK-R",
+                "target_offset": (32.0, -38.0),
                 "color": "#BC8CFF",
                 "priority": 0.85,
                 "rover": rover3,
@@ -305,6 +324,8 @@ class SimulationEngine:
             self.add_log("CONTROL", "Mission Simulation Running.", "success")
         else:
             self.swarm_rovers = {}
+            self.swarm_shared_hazard_ids = set()
+            self.swarm_shared_hazards_count = 0
             self.add_log("SWARM", "Multi-rover swarm mode deactivated. Returned to single rover.", "info")
 
     def reset(self, seed: Optional[int] = None) -> None:
@@ -395,13 +416,17 @@ class SimulationEngine:
                 self.shadow_rover.mission_status = RoverMissionStatus.OUTAGE_FALLBACK
             self.shadow_rover.set_path([(self.shadow_rover.x, self.shadow_rover.y), (tx, ty)])
 
-        if self.swarm_mode_enabled and "ROVER-1" in self.swarm_rovers:
-            r1 = self.swarm_rovers["ROVER-1"]["rover"]
-            r1.target_pos = (tx, ty)
-            if r1.mission_status == RoverMissionStatus.TARGET_REACHED:
-                r1.mission_status = RoverMissionStatus.NAVIGATING
-            r1_path = self.planner.plan_path((r1.x, r1.y), (tx, ty))
-            r1.set_path(r1_path)
+        if self.swarm_mode_enabled and self.swarm_rovers:
+            for r_info in self.swarm_rovers.values():
+                sr = r_info["rover"]
+                ox, oy = r_info.get("target_offset", (0.0, 0.0))
+                stx = float(max(20.0, min(self.terrain.width_m - 20.0, tx + ox)))
+                sty = float(max(20.0, min(self.terrain.height_m - 20.0, ty + oy)))
+                sr.target_pos = (stx, sty)
+                if sr.mission_status == RoverMissionStatus.TARGET_REACHED:
+                    sr.mission_status = RoverMissionStatus.NAVIGATING
+                sr_path = self.planner.plan_path((sr.x, sr.y), (stx, sty))
+                sr.set_path(sr_path)
 
         self.last_command = f"Target ({tx:.0f}, {ty:.0f}) · A* replan"
         self.add_log("PLANNER", f"TARGET RETASKED → ({tx:.0f}, {ty:.0f})", "info")
@@ -424,6 +449,17 @@ class SimulationEngine:
             replan = self.planner.trigger_replan((self.rover.x, self.rover.y), self.rover.target_pos, "USER_INJECTED_HAZARD")
             self.rover.set_path(replan["new_route"])
             self.add_log("PLANNER", "A* replanned route around placed obstacle ✓", "success")
+
+        # Share hazard proactively across active swarm units
+        if self.swarm_mode_enabled and self.swarm_rovers:
+            if hz["id"] not in self.swarm_shared_hazard_ids:
+                self.swarm_shared_hazard_ids.add(hz["id"])
+                self.swarm_shared_hazards_count += 1
+            for r_info in self.swarm_rovers.values():
+                sr = r_info["rover"]
+                if sr.mission_status != RoverMissionStatus.TARGET_REACHED:
+                    sr.set_path(self.planner.plan_path((sr.x, sr.y), sr.target_pos))
+            self.add_log("SWARM-MESH", f"📡 Shared {hz['type']} across mesh → all units replanned", "info")
 
         return hz
 
@@ -550,13 +586,66 @@ class SimulationEngine:
                     for log_msg in sched_res.get("reassignment_logs", []):
                         self.add_log("SWARM-AI", log_msg, "warning")
 
-                # 3. Step each rover in the swarm
+                # 3. Step each rover in the swarm with inter-rover separation & shared hazard intelligence
+                min_spacing = 24.0
                 for r_id, r_info in self.swarm_rovers.items():
                     r = r_info["rover"]
                     r_cost = float(self.terrain.get_cost(r.x, r.y))
                     r_slope = float(self.terrain.get_slope(r.x, r.y))
                     r_in_storm = self.dust_storm.check_inside(r.x, r.y) if self.dust_storm.active else False
                     r_info["in_storm"] = r_in_storm
+
+                    # Shared Mesh Intelligence: detect nearby obstacles & broadcast replan to entire swarm
+                    for hz in self.terrain.injected_hazards:
+                        dist_hz = math.hypot(r.x - hz["x"], r.y - hz["y"])
+                        if dist_hz <= hz["radius"] + 55.0 and hz["id"] not in self.swarm_shared_hazard_ids:
+                            self.swarm_shared_hazard_ids.add(hz["id"])
+                            self.swarm_shared_hazards_count += 1
+                            for peer_info in self.swarm_rovers.values():
+                                pr = peer_info["rover"]
+                                if pr.mission_status != RoverMissionStatus.TARGET_REACHED:
+                                    pr.set_path(self.planner.plan_path((pr.x, pr.y), pr.target_pos))
+                            self.add_log(
+                                "SWARM-MESH",
+                                f"📡 {r_info.get('unit_tag', r_id)} ({r_info['role']}) synced {hz.get('type', 'HAZARD')} → swarm replanned",
+                                "info",
+                            )
+                            break
+
+                    # Lightweight separation / obstacle-escape steering
+                    swarm_escape_heading: Optional[float] = None
+                    sep_x, sep_y = 0.0, 0.0
+                    for other_id, other_info in self.swarm_rovers.items():
+                        if other_id == r_id:
+                            continue
+                        orover = other_info["rover"]
+                        dx_o = r.x - orover.x
+                        dy_o = r.y - orover.y
+                        d_o = math.hypot(dx_o, dy_o)
+                        if 0.05 < d_o < min_spacing:
+                            weight = (min_spacing - d_o) / min_spacing
+                            sep_x += (dx_o / d_o) * weight
+                            sep_y += (dy_o / d_o) * weight
+
+                    # Impassable obstacle radial escape for swarm unit
+                    for hz in self.terrain.injected_hazards:
+                        if hz.get("type") == "SAND_TRAP":
+                            continue
+                        d_hz = math.hypot(r.x - hz["x"], r.y - hz["y"])
+                        if d_hz <= hz["radius"] + 3.0:
+                            if d_hz < 0.2:
+                                sep_x += math.cos(r.heading)
+                                sep_y += math.sin(r.heading)
+                            else:
+                                sep_x += ((r.x - hz["x"]) / d_hz) * 1.5
+                                sep_y += ((r.y - hz["y"]) / d_hz) * 1.5
+
+                    if (abs(sep_x) > 1e-3 or abs(sep_y) > 1e-3) and r.mission_status != RoverMissionStatus.TARGET_REACHED:
+                        # Blend separation vector with nominal forward heading toward target
+                        nom_h = math.atan2(r.target_pos[1] - r.y, r.target_pos[0] - r.x)
+                        blend_x = math.cos(nom_h) * 0.6 + sep_x * 1.4
+                        blend_y = math.sin(nom_h) * 0.6 + sep_y * 1.4
+                        swarm_escape_heading = math.atan2(blend_y, blend_x)
 
                     # Check which satellite is serving this rover for PNT
                     assigned_pnt_sat = None
@@ -609,6 +698,7 @@ class SimulationEngine:
                         terrain_slope=r_slope,
                         is_outage=(not pnt_avail),
                         in_dust_storm=r_in_storm,
+                        escape_heading=swarm_escape_heading,
                     )
 
                     # Append trail
@@ -894,17 +984,23 @@ class SimulationEngine:
                 logging.getLogger("NAVIS-BACKEND").error(f"Error compiling shadow rover telemetry: {e}", exc_info=True)
 
         swarm_data = []
+        swarm_links = []
         if self.swarm_mode_enabled and self.swarm_rovers:
             try:
-                for r_id, r_info in self.swarm_rovers.items():
+                swarm_items = list(self.swarm_rovers.items())
+                for r_id, r_info in swarm_items:
                     r = r_info["rover"]
                     ekf_x = float(r_info["ekf"].x[0])
                     ekf_y = float(r_info["ekf"].x[1])
                     r_err = math.hypot(r.x - ekf_x, r.y - ekf_y)
                     swarm_data.append({
+                        "id": r_info["rover_id"],
                         "rover_id": r_info["rover_id"],
+                        "unit_tag": r_info.get("unit_tag", r_info["rover_id"]),
                         "callsign": r_info["callsign"],
                         "role": r_info["role"],
+                        "status": str(r.mission_status),
+                        "battery": round(float(r.battery_pct), 1),
                         "color": r_info["color"],
                         "priority": float(r_info["priority"]),
                         "true_pos": [round(float(r.x), 2), round(float(r.y), 2)],
@@ -920,6 +1016,24 @@ class SimulationEngine:
                         "trail": r_info["trail"][-100:],
                         "mission_status": str(r.mission_status),
                     })
+
+                # Compute active peer-to-peer mesh communication links
+                for i in range(len(swarm_items)):
+                    id_a, info_a = swarm_items[i]
+                    ra = info_a["rover"]
+                    for j in range(i + 1, len(swarm_items)):
+                        id_b, info_b = swarm_items[j]
+                        rb = info_b["rover"]
+                        dist = math.hypot(ra.x - rb.x, ra.y - rb.y)
+                        if dist <= self.swarm_mesh_range_m:
+                            swarm_links.append({
+                                "from_id": id_a,
+                                "to_id": id_b,
+                                "from_pos": [round(float(ra.x), 2), round(float(ra.y), 2)],
+                                "to_pos": [round(float(rb.x), 2), round(float(rb.y), 2)],
+                                "distance_m": round(float(dist), 1),
+                                "signal_pct": int(max(15, min(100, round(100.0 * (1.0 - dist / (self.swarm_mesh_range_m * 1.15)))))),
+                            })
             except Exception as e:
                 import logging
                 logging.getLogger("NAVIS-BACKEND").error(f"Error compiling swarm telemetry: {e}", exc_info=True)
@@ -934,6 +1048,8 @@ class SimulationEngine:
             "shadow_rover": shadow_data,
             "swarm_mode_enabled": self.swarm_mode_enabled,
             "swarm_rovers": swarm_data,
+            "swarm_links": swarm_links,
+            "swarm_shared_hazards": int(self.swarm_shared_hazards_count),
             "terrain_preset": self.terrain_preset,
             "dust_storm": self.dust_storm.to_dict(),
             "mode_meta": ModeConfig.DESCRIPTIONS[self.active_mode],

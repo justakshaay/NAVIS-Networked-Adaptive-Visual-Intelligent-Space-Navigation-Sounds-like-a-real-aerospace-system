@@ -791,6 +791,30 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
 
     // 7c. Rover Chassis (Swarm or Single)
     if (state.swarm_mode_enabled && state.swarm_rovers && state.swarm_rovers.length > 0) {
+      // Peer-to-peer Swarm Mesh Comms Links
+      if (state.swarm_links && state.swarm_links.length > 0) {
+        for (const link of state.swarm_links) {
+          const ax = toCanvasX(link.from_pos[0]);
+          const ay = toCanvasY(link.from_pos[1]);
+          const bx = toCanvasX(link.to_pos[0]);
+          const by = toCanvasY(link.to_pos[1]);
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+          ctx.lineWidth = 1.4;
+          ctx.setLineDash([4, 4]);
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(161, 161, 170, 0.75)';
+          ctx.font = '8px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${link.distance_m}m`, (ax + bx) / 2, (ay + by) / 2 - 4);
+          ctx.restore();
+        }
+      }
+
       for (const sr of state.swarm_rovers) {
         const srX = toCanvasX(sr.true_pos[0]);
         const srY = toCanvasY(sr.true_pos[1]);
@@ -886,16 +910,17 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
 
         ctx.restore();
 
-        // Swarm Rover Label & Readout
+        // Swarm Rover Label & Unit Badge (R1, R2, R3)
         ctx.save();
+        const tag = sr.unit_tag ? `${sr.unit_tag} · ` : '';
         ctx.fillStyle = srColor;
         ctx.font = 'bold 9px "JetBrains Mono", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(`${sr.callsign.toUpperCase()} [${sr.role.toUpperCase()}]`, srX, srY - 14);
+        ctx.fillText(`${tag}${sr.callsign.toUpperCase()} [${sr.role.toUpperCase()}]`, srX, srY - 14);
 
         ctx.font = '8px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#8B949E';
-        const satTag = sr.assigned_satellite_id ? `SAT: ${sr.assigned_satellite_id}` : 'DR ONLY';
+        ctx.fillStyle = '#A1A1AA';
+        const satTag = sr.assigned_satellite_id ? `SAT: ${sr.assigned_satellite_id}` : 'MESH DR';
         ctx.fillText(`±${sr.uncertainty_m.toFixed(1)}m | ${sr.speed.toFixed(1)}m/s | ${satTag}`, srX, srY + 18);
         ctx.restore();
       }

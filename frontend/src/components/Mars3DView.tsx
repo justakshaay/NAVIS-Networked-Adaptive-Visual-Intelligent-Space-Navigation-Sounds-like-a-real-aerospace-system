@@ -195,7 +195,7 @@ const Rover3D: React.FC<Rover3DProps> = ({
   return (
     <group position={[x, elevation + 1.2, y]} rotation={[0, angle, 0]} ref={meshRef}>
       {/* Rover Main Chassis */}
-      <mesh castShadow position={[0, 0.8, 0]}>
+      <mesh castShadow receiveShadow position={[0, 0.8, 0]}>
         <boxGeometry args={[4.2, 1.8, 6.0]} />
         <meshStandardMaterial
           color={isGhost ? '#F85149' : '#161B22'}
@@ -208,7 +208,7 @@ const Rover3D: React.FC<Rover3DProps> = ({
       </mesh>
 
       {/* Solar Panel Deck (Top) */}
-      <mesh position={[0, 1.8, 0]}>
+      <mesh castShadow receiveShadow position={[0, 1.8, 0]}>
         <boxGeometry args={[4.8, 0.2, 6.4]} />
         <meshStandardMaterial
           color="#0F172A"
@@ -218,12 +218,12 @@ const Rover3D: React.FC<Rover3DProps> = ({
       </mesh>
 
       {/* Directional Sensor Mast */}
-      <mesh position={[0, 2.8, 2.0]}>
+      <mesh castShadow position={[0, 2.8, 2.0]}>
         <cylinderGeometry args={[0.15, 0.2, 2.0, 8]} />
         <meshStandardMaterial color="#30363D" metalness={0.8} />
       </mesh>
       {/* Stereo Camera Head */}
-      <mesh position={[0, 3.8, 2.0]}>
+      <mesh castShadow position={[0, 3.8, 2.0]}>
         <boxGeometry args={[1.2, 0.5, 0.6]} />
         <meshStandardMaterial color={color} />
       </mesh>
@@ -239,6 +239,8 @@ const Rover3D: React.FC<Rover3DProps> = ({
         [-2.0, 0, 2.0].map((wz, j) => (
           <mesh
             key={`${i}-${j}`}
+            castShadow
+            receiveShadow
             position={[wx, 0, wz]}
             rotation={[0, 0, Math.PI / 2]}
           >
@@ -704,25 +706,83 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({
           />
         )}
 
-        {/* 4. Swarm Rovers (Alpha, Beta, Gamma) if Swarm Active */}
+        {/* 4. Swarm Rovers (R1, R2, R3) + Peer-to-Peer Mesh Links & Trails */}
         {state?.swarm_mode_enabled && state.swarm_rovers && (
           <>
-            {state.swarm_rovers.map((sr) => (
-              <Rover3D
-                key={sr.rover_id}
-                x={sr.true_pos[0]}
-                y={sr.true_pos[1]}
-                heading={sr.heading}
-                elevation={getElevation(sr.true_pos[0], sr.true_pos[1])}
-                color={sr.color}
-                callsign={sr.callsign}
-                role={sr.role}
-                uncertainty={sr.uncertainty_m}
-                speed={sr.speed}
-                assignedSatellite={sr.assigned_satellite_id}
-                hideLabel={cameraMode === 'FOLLOW'}
-              />
-            ))}
+            {state.swarm_rovers.map((sr) => {
+              const trailPts: [number, number, number][] = (sr.trail || []).map((p) => [
+                p[0],
+                getElevation(p[0], p[1]) + 0.5,
+                p[1],
+              ]);
+              const pathPts: [number, number, number][] = (sr.path || []).map((p) => [
+                p[0],
+                getElevation(p[0], p[1]) + 0.35,
+                p[1],
+              ]);
+              return (
+                <React.Fragment key={sr.rover_id}>
+                  <Rover3D
+                    x={sr.true_pos[0]}
+                    y={sr.true_pos[1]}
+                    heading={sr.heading}
+                    elevation={getElevation(sr.true_pos[0], sr.true_pos[1])}
+                    color={sr.color}
+                    callsign={sr.unit_tag ? `${sr.unit_tag} ${sr.callsign}` : sr.callsign}
+                    role={sr.role}
+                    uncertainty={sr.uncertainty_m}
+                    speed={sr.speed}
+                    assignedSatellite={sr.assigned_satellite_id}
+                    hideLabel={cameraMode === 'FOLLOW'}
+                  />
+                  {trailPts.length > 1 && (
+                    <Line
+                      points={trailPts}
+                      color={sr.color}
+                      lineWidth={1.6}
+                      transparent
+                      opacity={0.6}
+                    />
+                  )}
+                  {pathPts.length > 1 && (
+                    <Line
+                      points={pathPts}
+                      color={sr.color}
+                      lineWidth={1.1}
+                      dashed
+                      dashScale={6}
+                      dashSize={2.5}
+                      gapSize={2}
+                      transparent
+                      opacity={0.32}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
+
+            {/* 3D Peer-to-Peer Mesh Comms Links */}
+            {state.swarm_links?.map((link) => {
+              const elevA = getElevation(link.from_pos[0], link.from_pos[1]) + 3.4;
+              const elevB = getElevation(link.to_pos[0], link.to_pos[1]) + 3.4;
+              return (
+                <Line
+                  key={`${link.from_id}-${link.to_id}`}
+                  points={[
+                    [link.from_pos[0], elevA, link.from_pos[1]],
+                    [link.to_pos[0], elevB, link.to_pos[1]],
+                  ]}
+                  color="#38BDF8"
+                  lineWidth={1.5}
+                  dashed
+                  dashScale={4}
+                  dashSize={2.5}
+                  gapSize={2}
+                  transparent
+                  opacity={0.7}
+                />
+              );
+            })}
           </>
         )}
 
