@@ -29,6 +29,20 @@ engine = SimulationEngine(seed=42)
 connected_websockets: set[WebSocket] = set()
 
 
+async def broadcast_state() -> None:
+    """Serialize and push the latest simulation snapshot to all connected WebSocket clients."""
+    if not connected_websockets:
+        return
+    payload = json.dumps(engine.get_full_state())
+    dead_sockets = set()
+    for ws in list(connected_websockets):
+        try:
+            await ws.send_text(payload)
+        except Exception:
+            dead_sockets.add(ws)
+    connected_websockets.difference_update(dead_sockets)
+
+
 # Pydantic Request Models
 class SpeedRequest(BaseModel):
     multiplier: float = Field(..., ge=0.1, le=10.0)
@@ -61,6 +75,11 @@ class HazardInjectRequest(BaseModel):
     hazard_type: str = "ROCK_FIELD"
 
 
+class TargetRequest(BaseModel):
+    x: float
+    y: float
+
+
 class BenchmarkRequest(BaseModel):
     seed: int = 42
 
@@ -76,16 +95,7 @@ async def simulation_loop():
                 engine.step(custom_dt=target_dt)
 
             # Broadcast state to WebSocket clients
-            if connected_websockets:
-                state_data = engine.get_full_state()
-                payload = json.dumps(state_data)
-                dead_sockets = set()
-                for ws in list(connected_websockets):
-                    try:
-                        await ws.send_text(payload)
-                    except Exception:
-                        dead_sockets.add(ws)
-                connected_websockets.difference_update(dead_sockets)
+            await broadcast_state()
 
         except Exception as e:
             logger.error(f"Error in simulation loop: {e}", exc_info=True)
@@ -181,7 +191,15 @@ async def pause_simulation():
 @app.post("/api/simulation/reset")
 async def reset_simulation(seed: Optional[int] = Query(None)):
     engine.reset(seed=seed)
+    await broadcast_state()
     return {"status": "SUCCESS", "sim_time": 0.0}
+
+
+@app.post("/api/simulation/target")
+async def set_target_api(req: TargetRequest):
+    tx, ty = engine.set_target(req.x, req.y)
+    await broadcast_state()
+    return {"status": "SUCCESS", "target_pos": [tx, ty]}
 
 
 @app.post("/api/simulation/speed")
@@ -345,7 +363,10 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                 elif action == "pause":
                     engine.pause()
                 elif action == "reset":
-                    engine.reset(seed=cmd.get("seed"))
+                    raw_seed = cmd.get("seed")
+                    valid_seed = raw_seed if isinstance(raw_seed, int) else None
+                    engine.reset(seed=valid_seed)
+                    await broadcast_state()
                 elif action == "speed":
                     engine.set_speed(cmd.get("multiplier", 1.0))
                 elif action == "mode":
@@ -361,6 +382,10 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                         cmd.get("radius", 28.0),
                         cmd.get("type", "ROCK_FIELD"),
                     )
+                    await broadcast_state()
+                elif action == "set_target":
+                    engine.set_target(float(cmd.get("x", 540.0)), float(cmd.get("y", 530.0)))
+                    await broadcast_state()
                 elif action == "demo":
                     engine.demo_runner.start_demo()
                 elif action == "toggle_shadow_race":
@@ -373,12 +398,7 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                     engine.toggle_swarm_mode(en)
                 elif action == "set_terrain":
                     engine.set_terrain_preset(cmd.get("preset", "procedural"))
-                    payload = json.dumps(engine.get_full_state())
-                    for ws in list(connected_websockets):
-                        try:
-                            await ws.send_text(payload)
-                        except Exception:
-                            connected_websockets.discard(ws)
+                    await broadcast_state()
                 elif action == "toggle_dust_storm":
                     raw_en = cmd.get("enabled", True)
                     en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))

@@ -40,6 +40,9 @@ export const RealtimeCharts: React.FC<RealtimeChartsProps> = ({ metrics, simTime
     };
 
     setHistory((prev) => {
+      if (sample.time === 0 || (prev.length > 0 && sample.time < prev[prev.length - 1].time)) {
+        return [sample];
+      }
       const updated = [...prev, sample];
       return updated.length > 50 ? updated.slice(updated.length - 50) : updated;
     });

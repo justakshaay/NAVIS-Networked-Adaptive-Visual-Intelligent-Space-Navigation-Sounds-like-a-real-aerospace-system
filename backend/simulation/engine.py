@@ -93,6 +93,7 @@ class SimulationEngine:
         self.latest_ekf: Dict[str, Any] = {}
         self.latest_hazard_alert: Optional[Dict[str, Any]] = None
         self.last_ai_tick = -1.0
+        self.last_command: str = "Standby"
 
         # Plan initial route
         self._initialize_mission()
@@ -312,6 +313,17 @@ class SimulationEngine:
             self.seed = seed
         self.is_running = False
         self.sim_time = 0.0
+        self.last_command = "Reset to origin"
+        self.dust_storm.active = False
+        self.dust_storm.rover_in_storm = False
+        self.was_in_dust_storm = False
+        self.latest_hazard_alert = None
+        self.latest_scheduler_decision = {}
+        self.latest_prediction = {
+            "predicted_trajectory": [],
+            "horizon_sec": 30.0,
+            "confidence_pct": 94.0,
+        }
         self.terrain.clear_injected_hazards()
         self.rover.reset(self.terrain.start_pos)
         self.constellation = SatelliteConstellation(self.terrain.width_m, self.terrain.height_m)
@@ -355,9 +367,45 @@ class SimulationEngine:
     def set_satellite_outage(self, outage: bool) -> None:
         self.constellation.set_global_outage(outage)
         if outage:
+            self.last_command = "Sat Outage injected"
             self.add_log("OUTAGE", "Constellation Satellite Outage Injected: PNT lost.", "danger")
         else:
+            self.last_command = "Sat Link restored"
             self.add_log("RESTORE", "Constellation Satellite PNT service restored.", "success")
+
+    def set_target(self, x: float, y: float) -> Tuple[float, float]:
+        """Update mission target coordinates, trigger immediate A* replan, and log retasking."""
+        tx = float(max(15.0, min(self.terrain.width_m - 15.0, float(x))))
+        ty = float(max(15.0, min(self.terrain.height_m - 15.0, float(y))))
+        self.terrain.target_pos = (tx, ty)
+        self.rover.target_pos = (tx, ty)
+        if self.rover.mission_status == RoverMissionStatus.TARGET_REACHED:
+            self.rover.mission_status = RoverMissionStatus.NAVIGATING
+
+        replan = self.planner.trigger_replan(
+            (self.rover.x, self.rover.y),
+            (tx, ty),
+            reason="TARGET_RETASKED",
+        )
+        self.rover.set_path(replan["new_route"])
+
+        if self.shadow_race_enabled and self.shadow_rover:
+            self.shadow_rover.target_pos = (tx, ty)
+            if self.shadow_rover.mission_status == RoverMissionStatus.TARGET_REACHED:
+                self.shadow_rover.mission_status = RoverMissionStatus.OUTAGE_FALLBACK
+            self.shadow_rover.set_path([(self.shadow_rover.x, self.shadow_rover.y), (tx, ty)])
+
+        if self.swarm_mode_enabled and "ROVER-1" in self.swarm_rovers:
+            r1 = self.swarm_rovers["ROVER-1"]["rover"]
+            r1.target_pos = (tx, ty)
+            if r1.mission_status == RoverMissionStatus.TARGET_REACHED:
+                r1.mission_status = RoverMissionStatus.NAVIGATING
+            r1_path = self.planner.plan_path((r1.x, r1.y), (tx, ty))
+            r1.set_path(r1_path)
+
+        self.last_command = f"Target ({tx:.0f}, {ty:.0f}) · A* replan"
+        self.add_log("PLANNER", f"TARGET RETASKED → ({tx:.0f}, {ty:.0f})", "info")
+        return (tx, ty)
 
     def inject_hazard(
         self,
@@ -368,6 +416,7 @@ class SimulationEngine:
     ) -> Dict[str, Any]:
         """Manually or dynamically inject a hazard to prompt route replanning."""
         hz = self.terrain.inject_hazard(x, y, radius, hazard_type)
+        self.last_command = f"Hazard ({x:.0f}, {y:.0f}) · A* replan"
         self.add_log("HAZARD", f"Hazard Injected at ({x:.0f}m, {y:.0f}m): {hazard_type}", "danger")
 
         # If in Mode C, evaluate immediate replan if along path
@@ -845,6 +894,7 @@ class SimulationEngine:
             "is_running": self.is_running,
             "speed_multiplier": self.speed_multiplier,
             "active_mode": self.active_mode,
+            "last_command": self.last_command,
             "shadow_race_enabled": self.shadow_race_enabled,
             "shadow_rover": shadow_data,
             "swarm_mode_enabled": self.swarm_mode_enabled,

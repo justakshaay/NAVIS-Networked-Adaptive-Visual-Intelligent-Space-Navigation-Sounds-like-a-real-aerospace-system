@@ -20,6 +20,8 @@ import { SimulationFullState } from '../types/simulation';
 interface MarsCanvasProps {
   state: SimulationFullState | null;
   onInjectHazard: (x: number, y: number, radius?: number, type?: string) => void;
+  onSetTarget?: (x: number, y: number) => void;
+  lastCommand?: string;
   isHazardModeActive?: boolean;
   onCancelHazardMode?: () => void;
 }
@@ -27,6 +29,8 @@ interface MarsCanvasProps {
 export const MarsCanvas: React.FC<MarsCanvasProps> = ({
   state,
   onInjectHazard,
+  onSetTarget,
+  lastCommand = 'Standby',
   isHazardModeActive = false,
   onCancelHazardMode,
 }) => {
@@ -38,6 +42,8 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const [targetRipple, setTargetRipple] = useState<{ x: number; y: number; ts: number } | null>(null);
   const [followRover, setFollowRover] = useState<boolean>(false);
   const [hoverCoord, setHoverCoord] = useState<{ x: number; y: number } | null>(null);
   const [canvasDimensions, setCanvasDimensions] = useState<{ width: number; height: number }>({ width: 800, height: 600 });
@@ -1076,7 +1082,30 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       ctx.restore();
     }
 
-    // 10. Scale Bar in Meters (Bottom-Left)
+    // 10. Subtle Target Retask Crosshair Ripple
+    if (targetRipple) {
+      const rx = toCanvasX(targetRipple.x);
+      const ry = toCanvasY(targetRipple.y);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(244, 244, 245, 0.75)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(rx, ry, 14, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(rx - 18, ry);
+      ctx.lineTo(rx - 6, ry);
+      ctx.moveTo(rx + 6, ry);
+      ctx.lineTo(rx + 18, ry);
+      ctx.moveTo(rx, ry - 18);
+      ctx.lineTo(rx, ry - 6);
+      ctx.moveTo(rx, ry + 6);
+      ctx.lineTo(rx, ry + 18);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 11. Scale Bar in Meters (Bottom-Left)
     const scaleBarMeters = scale * 100 > 120 ? 50 : 100;
     const barWidthPx = scaleBarMeters * scale;
     const sbX = toCanvasX(15);
@@ -1114,9 +1143,17 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     layerPrediction,
     layerSatellites,
     isHazardModeActive,
+    targetRipple,
   ]);
 
-  // Pan & Zoom Event Handlers
+  // Auto-clear target ripple after brief visual pulse
+  useEffect(() => {
+    if (!targetRipple) return;
+    const timer = window.setTimeout(() => setTargetRipple(null), 700);
+    return () => clearTimeout(timer);
+  }, [targetRipple]);
+
+  // Pan, Zoom & Click-to-Set-Target Event Handlers
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isHazardModeActive && state && canvasRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
@@ -1138,6 +1175,7 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       return;
     }
 
+    pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
     setIsDragging(true);
     setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     setFollowRover(false);
@@ -1174,8 +1212,42 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setIsDragging(false);
+
+    if (
+      !isHazardModeActive &&
+      onSetTarget &&
+      pointerDownPosRef.current &&
+      state &&
+      canvasRef.current
+    ) {
+      const moveDist = Math.hypot(
+        e.clientX - pointerDownPosRef.current.x,
+        e.clientY - pointerDownPosRef.current.y
+      );
+      if (moveDist <= 4) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+
+        const worldW = state.terrain_summary.width_m || 600;
+        const worldH = state.terrain_summary.height_m || 600;
+        const baseScale = Math.min(rect.width, rect.height) / worldW;
+        const scale = baseScale * zoom;
+        const offsetX = pan.x + (rect.width - worldW * scale) / 2;
+        const offsetY = pan.y + (rect.height - worldH * scale) / 2;
+
+        const worldX = (clickX - offsetX) / scale;
+        const worldY = (clickY - offsetY) / scale;
+
+        if (worldX >= 0 && worldX <= worldW && worldY >= 0 && worldY <= worldH) {
+          setTargetRipple({ x: worldX, y: worldY, ts: Date.now() });
+          onSetTarget(worldX, worldY);
+        }
+      }
+    }
+    pointerDownPosRef.current = null;
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -1237,7 +1309,10 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onMouseLeave={() => {
+            setIsDragging(false);
+            pointerDownPosRef.current = null;
+          }}
           onWheel={handleWheel}
           className="w-full h-full block"
         />
@@ -1406,6 +1481,20 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
             </div>
           </div>
         )}
+
+        {/* Live Engine & Command Indicator + Retask Hint (Bottom-Left above dock) */}
+        <div className="absolute bottom-14 left-3 z-20 flex items-center gap-2 px-2.5 py-1 bg-[#0C0C0E]/80 backdrop-blur-md border border-[#222226] rounded-md font-mono text-[10px] text-[#A1A1AA] pointer-events-none">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[#F4F4F5] font-medium">LIVE</span>
+          <span className="text-[#222226]">·</span>
+          <span>WS 20Hz</span>
+          <span className="text-[#222226]">·</span>
+          <span className="text-[#F4F4F5] truncate max-w-[210px]">{lastCommand}</span>
+        </div>
+
+        <div className="absolute bottom-14 right-3 z-20 hidden sm:block px-2.5 py-1 bg-[#0C0C0E]/75 backdrop-blur-md border border-[#222226] rounded-md text-[10px] text-[#71717A] pointer-events-none">
+          Click map to retask rover
+        </div>
 
         {/* Active Hazard Placement Notice */}
         {isHazardModeActive && (

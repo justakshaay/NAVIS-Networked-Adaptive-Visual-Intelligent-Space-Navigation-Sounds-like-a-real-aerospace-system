@@ -23,22 +23,29 @@ class AStarPlanner:
         self.last_replan_reason = ""
 
     def _build_padded_cost_grid(self, cost_grid: np.ndarray) -> np.ndarray:
-        """Inflate hazard cells by a 1-cell safety margin so paths do not graze hazard edges."""
-        padded = cost_grid.copy()
+        """Inflate hazard cells by a 1-cell safety margin via vectorized 3x3 dilation."""
         hazard_mask = cost_grid >= self.terrain.COST_HAZARD
         if not np.any(hazard_mask):
-            return padded
+            return cost_grid
 
-        grid_res = self.terrain.grid_res
-        ys, xs = np.where(hazard_mask)
+        h, w = hazard_mask.shape
+        padded_mask = np.zeros((h + 2, w + 2), dtype=bool)
+        padded_mask[1:-1, 1:-1] = hazard_mask
+        dilated = (
+            padded_mask[:-2, :-2]
+            | padded_mask[:-2, 1:-1]
+            | padded_mask[:-2, 2:]
+            | padded_mask[1:-1, :-2]
+            | padded_mask[1:-1, 1:-1]
+            | padded_mask[1:-1, 2:]
+            | padded_mask[2:, :-2]
+            | padded_mask[2:, 1:-1]
+            | padded_mask[2:, 2:]
+        )
+
+        padded = cost_grid.copy()
         margin_cost = self.terrain.COST_HAZARD * 0.6
-        for gy, gx in zip(ys, xs):
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    ny, nx = gy + dy, gx + dx
-                    if 0 <= nx < grid_res and 0 <= ny < grid_res:
-                        if padded[ny, nx] < margin_cost:
-                            padded[ny, nx] = margin_cost
+        padded[dilated & (padded < margin_cost)] = margin_cost
         return padded
 
     def _find_nearest_free_cell(

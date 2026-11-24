@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, Zap, ZapOff, AlertOctagon, Swords, Wind, Users } from 'lucide-react';
+import { Play, Pause, RotateCcw, Zap, ZapOff, AlertOctagon, Swords, Wind, Users, History } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
 
 interface MissionControlsProps {
@@ -16,6 +16,9 @@ interface MissionControlsProps {
   onToggleShadowRace?: () => void;
   onToggleSwarmMode?: () => void;
   onToggleDustStorm?: () => void;
+  isReplayOpen?: boolean;
+  isReplaying?: boolean;
+  onToggleReplay?: () => void;
   onRunDemo: () => void;
 }
 
@@ -33,6 +36,9 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
   onToggleShadowRace,
   onToggleSwarmMode,
   onToggleDustStorm,
+  isReplayOpen = false,
+  isReplaying = false,
+  onToggleReplay,
 }) => {
   const isRunning = state?.is_running || false;
   const isOutage = state?.satellites.some((s) => s.is_outage) || false;
@@ -67,7 +73,7 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
         )}
 
         <button
-          onClick={onReset}
+          onClick={() => onReset()}
           className="btn-control"
           title="Reset Simulation (R)"
         >
@@ -198,6 +204,21 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
             <Zap className="w-3.5 h-3.5" />
             <span>Restore Sat</span>
+          </button>
+        )}
+
+        {onToggleReplay && (
+          <button
+            onClick={onToggleReplay}
+            className={`btn-control ${
+              isReplayOpen || isReplaying
+                ? 'bg-[#F4F4F5] text-[#09090B] border-[#F4F4F5] hover:bg-white hover:text-[#09090B]'
+                : ''
+            }`}
+            title="Toggle Telemetry Black-Box Replay"
+          >
+            <History className="w-3.5 h-3.5" />
+            <span>Replay</span>
           </button>
         )}
       </div>

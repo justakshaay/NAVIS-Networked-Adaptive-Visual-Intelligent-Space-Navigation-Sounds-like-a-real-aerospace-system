@@ -25,6 +25,7 @@ export function useSimulation() {
   const [isReplaying, setIsReplaying] = useState<boolean>(false);
   const [replayIndex, setReplayIndex] = useState<number>(0);
   const [isReplayPlaying, setIsReplayPlaying] = useState<boolean>(false);
+  const [lastCommand, setLastCommand] = useState<string>('Standby');
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -259,7 +260,32 @@ export function useSimulation() {
 
   const startMission = useCallback(() => sendCommand({ action: 'start' }), [sendCommand]);
   const pauseMission = useCallback(() => sendCommand({ action: 'pause' }), [sendCommand]);
-  const resetMission = useCallback((seed?: number) => sendCommand({ action: 'reset', seed }), [sendCommand]);
+  const resetMission = useCallback((seed?: number) => {
+    const validSeed = typeof seed === 'number' && Number.isFinite(seed) ? seed : undefined;
+
+    // Immediately clear ReplayBar buffer & exit scrubbing so UI reflects reset right away
+    telemetryBufferRef.current = [];
+    setBufferLength(0);
+    setEvents([]);
+    setIsReplaying(false);
+    setReplayIndex(0);
+    setIsReplayPlaying(false);
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify(validSeed !== undefined ? { action: 'reset', seed: validSeed } : { action: 'reset' })
+      );
+    } else {
+      const url = validSeed !== undefined ? `${apiBase}/api/simulation/reset?seed=${validSeed}` : `${apiBase}/api/simulation/reset`;
+      fetch(url, { method: 'POST' })
+        .then(() => fetch(`${apiBase}/api/simulation/state`))
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) processNewSnapshot(data);
+        })
+        .catch(() => {});
+    }
+  }, [apiBase, processNewSnapshot]);
   const setSpeed = useCallback((multiplier: number) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'speed', multiplier }));
@@ -284,10 +310,71 @@ export function useSimulation() {
     }
   }, [apiBase]);
 
-  const simulateOutage = useCallback(() => sendCommand({ action: 'outage' }), [sendCommand]);
-  const restoreSatellite = useCallback(() => sendCommand({ action: 'restore' }), [sendCommand]);
+  const simulateOutage = useCallback(() => {
+    setLastCommand('Sat Outage triggered');
+    sendCommand({ action: 'outage' });
+  }, [sendCommand]);
+
+  const restoreSatellite = useCallback(() => {
+    setLastCommand('Sat Link restored');
+    sendCommand({ action: 'restore' });
+  }, [sendCommand]);
+
+  const setTarget = useCallback((x: number, y: number) => {
+    const tx = Math.round(x);
+    const ty = Math.round(y);
+    setLastCommand(`Target (${tx}, ${ty}) · A* replan`);
+
+    // Optimistically update target marker immediately
+    setLiveState((prev) => {
+      if (!prev || !prev.terrain_summary) return prev;
+      return {
+        ...prev,
+        terrain_summary: {
+          ...prev.terrain_summary,
+          target_pos: [x, y],
+        },
+      };
+    });
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'set_target', x, y }));
+    } else {
+      fetch(`${apiBase}/api/simulation/target`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x, y }),
+      })
+        .then(() => fetch(`${apiBase}/api/simulation/state`))
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) processNewSnapshot(data);
+        })
+        .catch(() => {});
+    }
+  }, [apiBase, processNewSnapshot]);
 
   const injectHazard = useCallback((x: number, y: number, radius = 28.0, type = 'ROCK_FIELD') => {
+    setLastCommand(`Hazard (${Math.round(x)}, ${Math.round(y)}) · A* replan`);
+    // Optimistically render the injected hazard immediately before WebSocket confirmation arrives
+    setLiveState((prev) => {
+      if (!prev || !prev.terrain_summary) return prev;
+      const optimisticHazard = {
+        id: `HZ-OPT-${Date.now()}`,
+        x,
+        y,
+        radius,
+        type,
+      };
+      return {
+        ...prev,
+        terrain_summary: {
+          ...prev.terrain_summary,
+          injected_hazards: [...(prev.terrain_summary.injected_hazards || []), optimisticHazard],
+        },
+      };
+    });
+
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'inject_hazard', x, y, radius, type }));
     } else {
@@ -295,9 +382,15 @@ export function useSimulation() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ x, y, radius, hazard_type: type }),
-      }).catch(() => {});
+      })
+        .then(() => fetch(`${apiBase}/api/simulation/state`))
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) processNewSnapshot(data);
+        })
+        .catch(() => {});
     }
-  }, [apiBase]);
+  }, [apiBase, processNewSnapshot]);
 
   const runDemo = useCallback(() => sendCommand({ action: 'demo' }), [sendCommand]);
 
@@ -402,6 +495,8 @@ export function useSimulation() {
     toggleSwarmMode,
     setTerrainPreset,
     toggleDustStorm,
+    setTarget,
+    lastCommand: state?.last_command || lastCommand,
     runBenchmark,
     clearBenchmark: () => setBenchmarkResult(null),
   };

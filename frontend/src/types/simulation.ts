@@ -226,6 +226,7 @@ export interface SimulationFullState {
   is_running: boolean;
   speed_multiplier: number;
   active_mode: 'MODE_A' | 'MODE_B' | 'MODE_C';
+  last_command?: string;
   shadow_race_enabled: boolean;
   shadow_rover?: ShadowRoverState | null;
   swarm_mode_enabled: boolean;

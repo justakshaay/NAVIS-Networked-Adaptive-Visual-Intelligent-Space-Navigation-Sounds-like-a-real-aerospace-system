@@ -47,6 +47,8 @@ export function App() {
     toggleSwarmMode,
     setTerrainPreset,
     toggleDustStorm,
+    setTarget,
+    lastCommand,
     runBenchmark,
   } = useSimulation();
 
@@ -56,6 +58,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'GNC' | 'ORBITAL' | 'AI'>('GNC');
   const [isDemoGuideVisible, setIsDemoGuideVisible] = useState<boolean>(true);
   const [isHazardMode, setIsHazardMode] = useState<boolean>(false);
+  const [isReplayOpen, setIsReplayOpen] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'2D' | '3D'>('2D');
 
   const handleOpenBenchmark = () => {
@@ -195,6 +198,8 @@ export function App() {
                   injectHazard(x, y, rad, type);
                   setIsHazardMode(false);
                 }}
+                onSetTarget={setTarget}
+                lastCommand={lastCommand}
                 isHazardModeActive={isHazardMode}
                 onCancelHazardMode={() => setIsHazardMode(false)}
               />
@@ -207,26 +212,38 @@ export function App() {
                   </div>
                 }
               >
-                <Mars3DView state={state} />
+                <Mars3DView
+                  state={state}
+                  onInjectHazard={(x, y, rad, type) => {
+                    injectHazard(x, y, rad, type);
+                    setIsHazardMode(false);
+                  }}
+                  onSetTarget={setTarget}
+                  lastCommand={lastCommand}
+                  isHazardModeActive={isHazardMode}
+                  onCancelHazardMode={() => setIsHazardMode(false)}
+                />
               </Suspense>
             )}
 
             {/* Minimal Bottom Dock */}
             <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center pointer-events-none">
-              <div className="pointer-events-auto w-full">
-                <ReplayBar
-                  isReplaying={isReplaying}
-                  replayIndex={replayIndex}
-                  bufferLength={bufferLength}
-                  currentTime_s={state?.sim_time || 0}
-                  liveTime_s={liveState?.sim_time || 0}
-                  events={events}
-                  isReplayPlaying={isReplayPlaying}
-                  onScrub={scrubTo}
-                  onTogglePlay={toggleReplayPlay}
-                  onReturnToLive={returnToLive}
-                />
-              </div>
+              {(isReplayOpen || isReplaying) && (
+                <div className="pointer-events-auto w-full">
+                  <ReplayBar
+                    isReplaying={isReplaying}
+                    replayIndex={replayIndex}
+                    bufferLength={bufferLength}
+                    currentTime_s={state?.sim_time || 0}
+                    liveTime_s={liveState?.sim_time || 0}
+                    events={events}
+                    isReplayPlaying={isReplayPlaying}
+                    onScrub={scrubTo}
+                    onTogglePlay={toggleReplayPlay}
+                    onReturnToLive={returnToLive}
+                  />
+                </div>
+              )}
               <div className="pointer-events-auto w-full">
                 <MissionControls
                   state={state}
@@ -242,6 +259,9 @@ export function App() {
                   onToggleShadowRace={() => toggleShadowRace(!state?.shadow_race_enabled)}
                   onToggleSwarmMode={() => toggleSwarmMode(!state?.swarm_mode_enabled)}
                   onToggleDustStorm={() => toggleDustStorm(!state?.dust_storm?.active)}
+                  isReplayOpen={isReplayOpen}
+                  isReplaying={isReplaying}
+                  onToggleReplay={() => setIsReplayOpen((r) => !r)}
                   onRunDemo={runDemo}
                 />
               </div>

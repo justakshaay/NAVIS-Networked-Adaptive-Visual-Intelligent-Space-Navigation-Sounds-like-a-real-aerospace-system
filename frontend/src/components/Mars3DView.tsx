@@ -8,6 +8,11 @@ import { SimulationFullState, SatelliteState, RoverState, SwarmRoverState } from
 
 interface Mars3DViewProps {
   state: SimulationFullState | null;
+  onInjectHazard?: (x: number, y: number, radius?: number, type?: string) => void;
+  onSetTarget?: (x: number, y: number) => void;
+  lastCommand?: string;
+  isHazardModeActive?: boolean;
+  onCancelHazardMode?: () => void;
 }
 
 // ==========================================
@@ -18,6 +23,8 @@ interface TerrainMeshProps {
   terrainPreset: 'procedural' | 'jezero_crater';
   terrainVersion: number;
   getElevation: (x: number, y: number) => number;
+  isHazardModeActive?: boolean;
+  onTerrainClick?: (wx: number, wz: number) => void;
 }
 
 const MartianTerrain: React.FC<TerrainMeshProps> = ({
@@ -25,6 +32,8 @@ const MartianTerrain: React.FC<TerrainMeshProps> = ({
   terrainPreset,
   terrainVersion,
   getElevation,
+  isHazardModeActive = false,
+  onTerrainClick,
 }) => {
   const width = terrainSummary?.width_m || 600;
   const height = terrainSummary?.height_m || 600;
@@ -102,7 +111,17 @@ const MartianTerrain: React.FC<TerrainMeshProps> = ({
   return (
     <group position={[width / 2, 0, height / 2]}>
       {/* Matte Martian Regolith Surface */}
-      <mesh geometry={geometry} receiveShadow>
+      <mesh
+        geometry={geometry}
+        receiveShadow
+        onClick={(e) => {
+          if (!onTerrainClick || e.delta > 5) return;
+          e.stopPropagation();
+          const wx = Math.max(10, Math.min(width - 10, e.point.x));
+          const wz = Math.max(10, Math.min(height - 10, e.point.z));
+          onTerrainClick(wx, wz);
+        }}
+      >
         <meshStandardMaterial
           vertexColors
           roughness={0.92}
@@ -392,16 +411,27 @@ const Satellite3D: React.FC<Satellite3DProps> = ({ sat, targetPos }) => {
 // ==========================================
 // Main 3D Interactive Scene Container
 // ==========================================
-export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
+export const Mars3DView: React.FC<Mars3DViewProps> = ({
+  state,
+  onInjectHazard,
+  onSetTarget,
+  lastCommand = 'Standby',
+  isHazardModeActive = false,
+  onCancelHazardMode,
+}) => {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const [cameraMode, setCameraMode] = useState<'ORBITAL' | 'FOLLOW' | 'TOP_DOWN'>('ORBITAL');
 
   const width = state?.terrain_summary.width_m || 600;
   const height = state?.terrain_summary.height_m || 600;
+  const terrainPreset = state?.terrain_preset || state?.terrain_summary?.preset || 'procedural';
+  const terrainVersion = state?.terrain_summary?.terrain_version ?? 1;
+  const elevationGridRef = useRef<number[][] | undefined>(state?.terrain_summary?.elevation_grid);
+  elevationGridRef.current = state?.terrain_summary?.elevation_grid;
 
-  // Bilinear Elevation Sampler Function
+  // Bilinear Elevation Sampler Function (stable across 20Hz ticks; refreshes on preset/version change)
   const getElevation = useMemo(() => {
-    const grid = state?.terrain_summary.elevation_grid;
+    const grid = elevationGridRef.current;
     if (!grid || grid.length < 2) {
       return (_x: number, _z: number) => 0.0;
     }
@@ -409,6 +439,7 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
     const cols = grid[0].length;
 
     return (x: number, z: number): number => {
+      const currentGrid = elevationGridRef.current || grid;
       const u = Math.max(0, Math.min(1, x / width)) * (cols - 1);
       const v = Math.max(0, Math.min(1, z / height)) * (rows - 1);
 
@@ -420,16 +451,16 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
       const fx = u - x0;
       const fz = v - z0;
 
-      const h00 = grid[z0][x0];
-      const h10 = grid[z0][x1];
-      const h01 = grid[z1][x0];
-      const h11 = grid[z1][x1];
+      const h00 = currentGrid[z0][x0];
+      const h10 = currentGrid[z0][x1];
+      const h01 = currentGrid[z1][x0];
+      const h11 = currentGrid[z1][x1];
 
       const top = h00 * (1 - fx) + h10 * fx;
       const bottom = h01 * (1 - fx) + h11 * fx;
       return top * (1 - fz) + bottom * fz;
     };
-  }, [state?.terrain_summary.elevation_grid, width, height]);
+  }, [terrainPreset, terrainVersion, width, height, state?.terrain_summary?.elevation_grid?.length]);
 
   // Lead Rover Coordinates for Camera & RF Beams
   const leadRoverPos: [number, number, number] = useMemo(() => {
@@ -517,7 +548,11 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
   };
 
   return (
-    <div className="w-full h-full relative bg-[#080A0D] overflow-hidden select-none font-mono">
+    <div
+      className={`w-full h-full relative bg-[#09090B] overflow-hidden select-none font-mono ${
+        isHazardModeActive ? 'cursor-crosshair' : 'cursor-default'
+      }`}
+    >
       {/* 3D Canvas Viewport */}
       <Canvas
         camera={{ position: [width / 2, 420, height * 1.2], fov: 45, near: 1, far: 4000 }}
@@ -567,6 +602,14 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
             terrainPreset={state.terrain_preset || 'procedural'}
             terrainVersion={state.terrain_summary?.terrain_version ?? 1}
             getElevation={getElevation}
+            isHazardModeActive={isHazardModeActive}
+            onTerrainClick={(wx, wz) => {
+              if (isHazardModeActive) {
+                onInjectHazard?.(wx, wz, 28.0, 'ROCK_FIELD');
+              } else {
+                onSetTarget?.(wx, wz);
+              }
+            }}
           />
         )}
 
@@ -662,10 +705,13 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
         )}
 
         {/* 6. Dynamic Injected Hazards */}
-        {state?.terrain_summary?.injected_hazards?.map((hz) => {
+        {state?.terrain_summary?.injected_hazards?.map((hz, idx) => {
           const hzElev = getElevation(hz.x, hz.y);
           return (
-            <group key={hz.id} position={[hz.x, hzElev, hz.y]}>
+            <group
+              key={`${idx}-${Math.round(hz.x)}-${Math.round(hz.y)}`}
+              position={[hz.x, hzElev, hz.y]}
+            >
               <mesh position={[0, 4, 0]}>
                 <cylinderGeometry args={[hz.radius * 0.7, hz.radius * 0.8, 8, 16]} />
                 <meshStandardMaterial color="#F85149" roughness={0.7} />
@@ -777,10 +823,36 @@ export const Mars3DView: React.FC<Mars3DViewProps> = ({ state }) => {
         </button>
       </div>
 
+      {/* Active Hazard Placement Notice */}
+      {isHazardModeActive && (
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-md bg-[#0C0C0E] border border-[#3F3F46] text-[#F4F4F5] font-sans text-xs font-medium flex items-center gap-2.5 shadow-xl">
+          <AlertOctagon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <span>Click anywhere on the 3D terrain to place a hazard</span>
+          {onCancelHazardMode && (
+            <button
+              onClick={onCancelHazardMode}
+              className="ml-1 px-2 py-0.5 rounded-[4px] bg-[#141417] border border-[#222226] text-[11px] text-[#A1A1AA] hover:text-[#F4F4F5]"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Live Engine & Command Indicator (Bottom-Left above dock) */}
+      <div className="absolute bottom-14 left-3 z-20 flex items-center gap-2 px-2.5 py-1 bg-[#0C0C0E]/80 backdrop-blur-md border border-[#222226] rounded-md font-mono text-[10px] text-[#A1A1AA] pointer-events-none">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="text-[#F4F4F5] font-medium">LIVE</span>
+        <span className="text-[#222226]">·</span>
+        <span>WS 20Hz</span>
+        <span className="text-[#222226]">·</span>
+        <span className="text-[#F4F4F5] truncate max-w-[210px]">{lastCommand}</span>
+      </div>
+
       {/* Floating 3D Instructions Badge (Bottom-Right) */}
-      <div className="absolute bottom-20 right-3 z-10 pointer-events-none hidden md:block">
+      <div className="absolute bottom-14 right-3 z-10 pointer-events-none hidden md:block">
         <div className="text-[10px] font-mono text-[#71717A] bg-[#0C0C0E]/80 border border-[#222226] px-2.5 py-1 rounded-md backdrop-blur-sm">
-          <span>Drag: Rotate · Right-drag: Pan · Scroll: Zoom</span>
+          <span>Click terrain to retask · Drag: Rotate · Scroll: Zoom</span>
         </div>
       </div>
     </div>
