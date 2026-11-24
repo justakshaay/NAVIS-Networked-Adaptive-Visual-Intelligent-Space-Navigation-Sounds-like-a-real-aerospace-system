@@ -28,6 +28,8 @@ export function App() {
     injectHazard,
     runDemo,
     toggleShadowRace,
+    setTerrainPreset,
+    toggleDustStorm,
     runBenchmark,
   } = useSimulation();
 
@@ -65,6 +67,7 @@ export function App() {
         isDemoActive={isDemoActive}
         onToggleDemoGuide={() => setIsDemoGuideVisible((v) => !v)}
         onStartDemo={runDemo}
+        onSetTerrainPreset={setTerrainPreset}
       />
 
       {/* 2. Main Cockpit Workspace */}
@@ -108,6 +111,7 @@ export function App() {
                 onToggleHazardMode={() => setIsHazardMode((h) => !h)}
                 isHazardModeActive={isHazardMode}
                 onToggleShadowRace={() => toggleShadowRace(!state?.shadow_race_enabled)}
+                onToggleDustStorm={() => toggleDustStorm(!state?.dust_storm?.active)}
                 onRunDemo={runDemo}
               />
             </div>

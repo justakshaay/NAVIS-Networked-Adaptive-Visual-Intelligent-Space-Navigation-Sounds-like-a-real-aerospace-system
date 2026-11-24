@@ -116,6 +116,34 @@ async def test_e2e_websocket():
         await ws.send(json.dumps({"action": "toggle_shadow_race", "enabled": False}))
         print("[OK] Toggled Shadow Race OFF.")
 
+        # 8. Test Jezero Crater Terrain Preset & Dynamic Dust Storm
+        await ws.send(json.dumps({"action": "set_terrain", "preset": "jezero_crater"}))
+        print("[OK] Switched Terrain Preset to 'jezero_crater' via WebSocket...")
+
+        for _ in range(10):
+            msg = await ws.recv()
+            state = json.loads(msg)
+
+        assert state.get("terrain_preset") == "jezero_crater"
+        print(f"[OK] Verified active terrain preset: {state['terrain_preset']}")
+
+        # Trigger Dust Storm Fault
+        await ws.send(json.dumps({"action": "toggle_dust_storm", "enabled": True}))
+        print("[OK] Injected Dynamic Moving Dust Storm via WebSocket...")
+
+        for _ in range(20):
+            msg = await ws.recv()
+            state = json.loads(msg)
+
+        assert state.get("dust_storm") is not None
+        assert state["dust_storm"]["active"] is True
+        print(f"[OK] Dust storm telemetry: active={state['dust_storm']['active']}, at ({state['dust_storm']['x']:.1f}, {state['dust_storm']['y']:.1f})")
+
+        # Clear Dust Storm and restore procedural
+        await ws.send(json.dumps({"action": "toggle_dust_storm", "enabled": False}))
+        await ws.send(json.dumps({"action": "set_terrain", "preset": "procedural"}))
+        print("[OK] Cleared dust storm and restored procedural terrain.")
+
     print("\n[SUCCESS] E2E WEBSOCKET & SIMULATION CONTROLS FULLY VERIFIED!")
 
 

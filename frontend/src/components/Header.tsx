@@ -9,6 +9,7 @@ interface HeaderProps {
   isDemoActive?: boolean;
   onToggleDemoGuide?: () => void;
   onStartDemo?: () => void;
+  onSetTerrainPreset?: (preset: 'procedural' | 'jezero_crater') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   isDemoActive = false,
   onToggleDemoGuide,
   onStartDemo,
+  onSetTerrainPreset,
 }) => {
   const [utcTime, setUtcTime] = useState<string>('');
 
@@ -73,6 +75,35 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {state?.mode_meta.tag || (currentMode === 'MODE_C' ? 'ADAPTIVE AI' : currentMode)}
           </span>
+        </div>
+
+        {/* Terrain Preset Selector Pill */}
+        <div className="hidden sm:flex items-center bg-[#161B22] border border-[#21262D] rounded-[2px] p-0.5 text-[10px]">
+          <span className="text-[9px] uppercase tracking-wider text-[#8B949E] px-1 font-semibold">
+            MAP:
+          </span>
+          <button
+            onClick={() => onSetTerrainPreset?.('procedural')}
+            className={`px-1.5 py-0.5 rounded-[1px] transition-colors duration-150 ${
+              (state?.terrain_preset || 'procedural') === 'procedural'
+                ? 'bg-[#21262D] text-[#E6EDF3] font-bold'
+                : 'text-[#8B949E] hover:text-[#E6EDF3]'
+            }`}
+            title="Switch to Procedural Martian Plains with randomized craters and rock fields"
+          >
+            PROCEDURAL
+          </button>
+          <button
+            onClick={() => onSetTerrainPreset?.('jezero_crater')}
+            className={`px-1.5 py-0.5 rounded-[1px] transition-colors duration-150 ${
+              state?.terrain_preset === 'jezero_crater'
+                ? 'bg-[#58A6FF]/20 text-[#58A6FF] font-bold border border-[#58A6FF]/40'
+                : 'text-[#8B949E] hover:text-[#E6EDF3]'
+            }`}
+            title="Switch to NASA Jezero Crater Western River Delta & Ancient Lakebed Basin"
+          >
+            JEZERO CRATER
+          </button>
         </div>
 
         {/* Autonomous Fallback Warning Flag */}

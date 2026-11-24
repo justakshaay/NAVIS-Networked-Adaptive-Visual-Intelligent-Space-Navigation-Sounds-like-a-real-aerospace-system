@@ -128,10 +128,36 @@ def test_simulation_engine_and_benchmark():
     print(f"[OK] Benchmark Evaluation complete: Best Mode = {bench['best_mode']}")
 
 
+def test_jezero_crater_and_dust_storm():
+    print("Testing Jezero Crater Terrain Preset & Dynamic Dust Storm...")
+    engine = SimulationEngine(seed=42)
+    engine.set_terrain_preset("jezero_crater")
+    assert engine.terrain_preset == "jezero_crater"
+    assert engine.terrain.preset == "jezero_crater"
+    assert len(engine.planner.current_route) >= 2
+    print(f"[OK] Jezero Crater Terrain generated with {len(engine.planner.current_route)} waypoints.")
+
+    # Test Dust Storm Fault
+    engine.toggle_dust_storm(True)
+    assert engine.dust_storm.active is True
+    engine.is_running = True
+    for _ in range(15):
+        engine.step(0.05)
+    state = engine.get_full_state()
+    assert "dust_storm" in state
+    assert state["dust_storm"]["active"] is True
+    print(f"[OK] Dust storm drifting at ({state['dust_storm']['x']:.1f}, {state['dust_storm']['y']:.1f}), in_storm={state['dust_storm']['rover_in_storm']}")
+
+    engine.toggle_dust_storm(False)
+    assert engine.dust_storm.active is False
+    print("[OK] Dust storm fault injection & clearing verified.")
+
+
 if __name__ == "__main__":
     test_terrain_and_planner()
     test_ekf_and_sensors()
     test_ai_scheduler_and_trajectory()
     test_simulation_engine_and_benchmark()
+    test_jezero_crater_and_dust_storm()
     print("\nALL BACKEND VERIFICATION TESTS PASSED SUCCESSFULLY!")
 

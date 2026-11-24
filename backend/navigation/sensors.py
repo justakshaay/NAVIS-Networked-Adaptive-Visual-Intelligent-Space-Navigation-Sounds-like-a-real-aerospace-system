@@ -57,9 +57,12 @@ class SensorSuite:
         true_omega: float,
         wheel_slip: float,
         pnt_available: bool,
+        in_dust_storm: bool = False,
+        dust_storm_intensity: float = 0.85,
     ) -> Dict[str, Any]:
         """
         Sample all 4 navigation sensors with realistic physical noise and drift.
+        When in_dust_storm is True, Visual Odometry (VO) is degraded by 5x noise due to atmospheric dust occlusion.
         """
         # 1. IMU Random Walk Bias Update
         self.imu_bias_ax += np.random.normal(0.0, self.sigma_bias_drift) * math.sqrt(dt)
@@ -101,17 +104,23 @@ class SensorSuite:
         true_dy = true_y - self.prev_true_y
         true_dheading = (true_heading - self.prev_true_heading + math.pi) % (2 * math.pi) - math.pi
 
-        meas_vo_dx = true_dx + np.random.normal(0.0, self.sigma_vo * math.sqrt(max(0.01, dt)))
-        meas_vo_dy = true_dy + np.random.normal(0.0, self.sigma_vo * math.sqrt(max(0.01, dt)))
-        meas_vo_dtheta = true_dheading + np.random.normal(0.0, 0.01 * math.sqrt(max(0.01, dt)))
+        # If in dust storm, visual features are obscured -> 5x noise scale and lowered confidence
+        vo_noise_scale = 5.0 * (0.8 + 0.4 * dust_storm_intensity) if in_dust_storm else 1.0
 
+        meas_vo_dx = true_dx + np.random.normal(0.0, self.sigma_vo * vo_noise_scale * math.sqrt(max(0.01, dt)))
+        meas_vo_dy = true_dy + np.random.normal(0.0, self.sigma_vo * vo_noise_scale * math.sqrt(max(0.01, dt)))
+        meas_vo_dtheta = true_dheading + np.random.normal(0.0, 0.01 * vo_noise_scale * math.sqrt(max(0.01, dt)))
+
+        base_conf = 0.28 if in_dust_storm else 0.92
         vo_data = {
             "active": True,
+            "status": "DEGRADED" if in_dust_storm else "NOMINAL",
+            "degraded": bool(in_dust_storm),
             "dx": float(meas_vo_dx),
             "dy": float(meas_vo_dy),
             "dtheta": float(meas_vo_dtheta),
             "feature_confidence": float(
-                np.clip(0.92 - wheel_slip * 0.5 + np.random.normal(0.0, 0.03), 0.5, 0.99)
+                np.clip(base_conf - wheel_slip * 0.5 + np.random.normal(0.0, 0.03), 0.1, 0.99)
             ),
         }
 

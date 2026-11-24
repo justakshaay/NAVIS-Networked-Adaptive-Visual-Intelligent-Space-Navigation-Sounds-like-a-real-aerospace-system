@@ -42,6 +42,14 @@ class ShadowRaceRequest(BaseModel):
     enabled: bool = True
 
 
+class TerrainPresetRequest(BaseModel):
+    preset: str = "procedural"
+
+
+class DustStormRequest(BaseModel):
+    enabled: bool = True
+
+
 class HazardInjectRequest(BaseModel):
     x: float
     y: float
@@ -194,6 +202,24 @@ async def toggle_shadow_race_api(req: ShadowRaceRequest):
     }
 
 
+@app.post("/api/simulation/terrain")
+async def set_terrain_preset_api(req: TerrainPresetRequest):
+    engine.set_terrain_preset(req.preset)
+    return {
+        "status": "SUCCESS",
+        "terrain_preset": engine.terrain_preset,
+    }
+
+
+@app.post("/api/simulation/dust_storm")
+async def toggle_dust_storm_api(req: DustStormRequest):
+    engine.toggle_dust_storm(req.enabled)
+    return {
+        "status": "SUCCESS",
+        "dust_storm": engine.dust_storm.to_dict(),
+    }
+
+
 @app.get("/api/rover")
 async def get_rover():
     return {
@@ -327,6 +353,12 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                     raw_en = cmd.get("enabled", True)
                     en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))
                     engine.toggle_shadow_race(en)
+                elif action == "set_terrain":
+                    engine.set_terrain_preset(cmd.get("preset", "procedural"))
+                elif action == "toggle_dust_storm":
+                    raw_en = cmd.get("enabled", True)
+                    en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))
+                    engine.toggle_dust_storm(en)
             except Exception as e:
                 logger.error(f"Error handling WebSocket message: {e}")
 

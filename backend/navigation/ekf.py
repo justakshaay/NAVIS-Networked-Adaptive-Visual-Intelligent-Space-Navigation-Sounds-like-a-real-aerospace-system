@@ -221,9 +221,11 @@ class NAVIS_EKF:
         meas_vy = vo_meas["dy"] / dt
         meas_omega = vo_meas["dtheta"] / dt
 
-        # Scaled noise based on feature confidence
+        # Scaled noise based on feature confidence (and further inflated during dust storms)
         conf = vo_meas.get("feature_confidence", 0.9)
-        R_scaled = self.R_vo / max(0.2, conf)
+        R_scaled = self.R_vo / max(0.15, conf)
+        if vo_meas.get("degraded") or vo_meas.get("status") == "DEGRADED":
+            R_scaled = R_scaled * 4.5
 
         z = np.array([meas_vx, meas_vy, meas_omega], dtype=np.float64)
 

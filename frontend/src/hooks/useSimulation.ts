@@ -144,6 +144,24 @@ export function useSimulation() {
     }).catch(() => {});
   }, [sendCommand, apiBase]);
 
+  const setTerrainPreset = useCallback((preset: 'procedural' | 'jezero_crater') => {
+    sendCommand({ action: 'set_terrain', preset });
+    fetch(`${apiBase}/api/simulation/terrain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preset }),
+    }).catch(() => {});
+  }, [sendCommand, apiBase]);
+
+  const toggleDustStorm = useCallback((enabled: boolean) => {
+    sendCommand({ action: 'toggle_dust_storm', enabled });
+    fetch(`${apiBase}/api/simulation/dust_storm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }).catch(() => {});
+  }, [sendCommand, apiBase]);
+
   const runBenchmark = useCallback(async (seed = 42) => {
     setIsBenchmarking(true);
     try {
@@ -178,6 +196,8 @@ export function useSimulation() {
     injectHazard,
     runDemo,
     toggleShadowRace,
+    setTerrainPreset,
+    toggleDustStorm,
     runBenchmark,
     clearBenchmark: () => setBenchmarkResult(null),
   };

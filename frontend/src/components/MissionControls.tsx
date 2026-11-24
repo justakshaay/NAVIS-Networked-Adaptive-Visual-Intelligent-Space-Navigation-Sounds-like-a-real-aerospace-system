@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, Zap, ZapOff, AlertOctagon, FastForward, Cpu, Compass, Swords } from 'lucide-react';
+import { Play, Pause, RotateCcw, Zap, ZapOff, AlertOctagon, FastForward, Cpu, Compass, Swords, Wind } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
 
 interface MissionControlsProps {
@@ -14,6 +14,7 @@ interface MissionControlsProps {
   onToggleHazardMode: () => void;
   isHazardModeActive: boolean;
   onToggleShadowRace?: () => void;
+  onToggleDustStorm?: () => void;
   onRunDemo: () => void;
 }
 
@@ -29,12 +30,14 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
   onToggleHazardMode,
   isHazardModeActive,
   onToggleShadowRace,
+  onToggleDustStorm,
 }) => {
   const isRunning = state?.is_running || false;
   const isOutage = state?.satellites.some((s) => s.is_outage) || false;
   const currentSpeed = state?.speed_multiplier || 1.0;
   const currentMode = state?.active_mode || 'MODE_C';
   const isShadowRace = state?.shadow_race_enabled || false;
+  const isDustStorm = state?.dust_storm?.active || false;
 
   return (
     <div className="flex flex-wrap items-center gap-2 p-1.5 bg-[#0F1217]/95 backdrop-blur-md border border-[#21262D] rounded-[2px] shadow-panel font-mono text-xs select-none max-w-full">
@@ -187,6 +190,22 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
           <AlertOctagon className="w-3.5 h-3.5" />
           <span>{isHazardModeActive ? 'CROSSHAIR ACTIVE' : 'INJECT HAZARD'}</span>
         </button>
+
+        {/* Dust Storm Fault Trigger */}
+        {onToggleDustStorm && (
+          <button
+            onClick={onToggleDustStorm}
+            className={`btn-control transition-colors duration-150 ${
+              isDustStorm
+                ? 'bg-[#D29922] text-[#080A0D] border-[#D29922] font-bold animate-pulse'
+                : 'text-[#D29922] border-[#D29922]/50 hover:bg-[#D29922]/15'
+            }`}
+            title="Inject dynamic moving Martian dust storm fault across the terrain (degrades Visual Odometry)"
+          >
+            <Wind className="w-3.5 h-3.5" />
+            <span>{isDustStorm ? 'STORM ACTIVE' : 'DUST STORM'}</span>
+          </button>
+        )}
 
         {/* Satellite Outage / Restore */}
         {!isOutage ? (

@@ -292,6 +292,56 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       }
     }
 
+    // 4b. Dynamic Moving Martian Dust Storm Front
+    if (state.dust_storm && state.dust_storm.active) {
+      const storm = state.dust_storm;
+      const stormX = toCanvasX(storm.x);
+      const stormY = toCanvasY(storm.y);
+      const stormRad = toWorldDist(storm.radius);
+
+      ctx.save();
+      // Translucent atmospheric body with soft radial falloff
+      const stormGrad = ctx.createRadialGradient(stormX, stormY, stormRad * 0.1, stormX, stormY, stormRad);
+      stormGrad.addColorStop(0, 'rgba(217, 119, 6, 0.28)');
+      stormGrad.addColorStop(0.65, 'rgba(217, 119, 6, 0.15)');
+      stormGrad.addColorStop(1, 'rgba(217, 119, 6, 0.0)');
+      ctx.fillStyle = stormGrad;
+      ctx.beginPath();
+      ctx.arc(stormX, stormY, stormRad, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Dashed wind-front perimeter
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.65)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.arc(stormX, stormY, stormRad, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Internal drifting dust streaks
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.28)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([8, 8]);
+      for (let i = -2; i <= 2; i++) {
+        const offset = i * (stormRad * 0.25);
+        ctx.beginPath();
+        ctx.moveTo(stormX - stormRad * 0.6, stormY + offset);
+        ctx.lineTo(stormX + stormRad * 0.6, stormY + offset + (storm.vy / Math.max(0.1, Math.abs(storm.vx))) * 12);
+        ctx.stroke();
+      }
+
+      // Storm Front Monospace Label
+      ctx.fillStyle = '#F59E0B';
+      ctx.font = 'bold 9px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        `DUST STORM (r=${Math.round(storm.radius)}m | VO DEGRADED)`,
+        stormX,
+        stormY - stormRad - 6
+      );
+      ctx.restore();
+    }
+
     // 5. Origin and Science Target Markers
     const startPos = state.terrain_summary.start_pos || [50, 50];
     const targetPos = state.terrain_summary.target_pos || [540, 530];
@@ -979,6 +1029,14 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
           </div>
         </div>
 
+        {/* Dust Storm In-Field Warning Pill */}
+        {state?.dust_storm?.rover_in_storm && (
+          <div className="absolute top-14 left-2 z-20 flex items-center gap-2 px-2.5 py-1 bg-[#D29922]/20 border border-[#D29922] rounded-[2px] shadow-panel font-mono text-xs text-[#D29922] animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-[#D29922] animate-ping" />
+            <span className="font-bold">DUST STORM — VO DEGRADED</span>
+          </div>
+        )}
+
         {/* 2. LIVE AI ACTIVITY TICKER (Top-Center) */}
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none max-w-[540px] w-full px-2">
           <div className="w-full bg-[#0F1217]/90 backdrop-blur-md border border-[#21262D] rounded-full px-3 py-1 flex items-center justify-center gap-2 text-xs font-mono shadow-panel truncate">
@@ -1173,6 +1231,12 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
                 <div className="flex items-center gap-2 pt-1 border-t border-[#21262D]">
                   <span className="w-3 h-0.5 border-b border-dashed border-[#F85149] inline-block" />
                   <span className="text-[#F85149] font-bold">Shadow Rover (Mode A DR)</span>
+                </div>
+              )}
+              {state?.dust_storm?.active && (
+                <div className="flex items-center gap-2 pt-1 border-t border-[#21262D]">
+                  <span className="w-3 h-2 rounded-full border border-dashed border-[#F59E0B] bg-[#D97706]/20 inline-block" />
+                  <span className="text-[#F59E0B] font-semibold">Dust Storm Zone (VO Occlusion)</span>
                 </div>
               )}
             </div>

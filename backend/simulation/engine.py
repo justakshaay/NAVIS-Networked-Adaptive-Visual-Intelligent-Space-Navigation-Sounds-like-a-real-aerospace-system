@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Optional
 import math
 from datetime import datetime
 
-from backend.simulation.terrain import MarsTerrain
+from backend.simulation.terrain import MarsTerrain, DustStorm
 from backend.simulation.rover import MarsRover
 from backend.simulation.satellites import SatelliteConstellation
 from backend.simulation.metrics import PerformanceMetrics
@@ -38,8 +38,13 @@ class SimulationEngine:
         # Active Navigation Mode (MODE_A, MODE_B, MODE_C)
         self.active_mode = NavigationMode.MODE_C
 
+        # Terrain & Atmospheric Subsystems
+        self.terrain_preset: str = "procedural"
+        self.dust_storm = DustStorm()
+        self.was_in_dust_storm: bool = False
+
         # Subsystems
-        self.terrain = MarsTerrain(seed=seed)
+        self.terrain = MarsTerrain(seed=seed, preset=self.terrain_preset)
         self.rover = MarsRover(
             start_x=self.terrain.start_pos[0],
             start_y=self.terrain.start_pos[1],
@@ -225,6 +230,40 @@ class SimulationEngine:
 
         return hz
 
+    def set_terrain_preset(self, preset: str) -> None:
+        """Switch terrain preset ('procedural' or 'jezero_crater') and reset mission cleanly."""
+        if preset not in ["procedural", "jezero_crater"]:
+            preset = "procedural"
+        self.terrain_preset = preset
+        self.terrain = MarsTerrain(
+            width_m=600.0,
+            height_m=600.0,
+            grid_res=60,
+            seed=self.seed,
+            preset=preset,
+        )
+        self.planner = AStarPlanner(self.terrain)
+        self.hazard_detector = VisualHazardDetector(self.terrain)
+        self.reset()
+        if self.shadow_race_enabled:
+            self._initialize_shadow_rover()
+        self.add_log("TERRAIN", f"Martian Surface Preset Switched to: {preset.upper().replace('_', ' ')}", "warning")
+
+    def toggle_dust_storm(self, enabled: Optional[bool] = None) -> None:
+        """Activate or deactivate the dynamic moving dust storm fault."""
+        if enabled is None:
+            self.dust_storm.active = not self.dust_storm.active
+        else:
+            self.dust_storm.active = bool(enabled)
+
+        if self.dust_storm.active:
+            self.dust_storm.spawn_upwind(self.rover.x, self.rover.y, self.rover.heading, distance=65.0)
+            self.add_log("STORM", "⚠️ DUST STORM INJECTED: High-velocity particle cloud approaching rover path", "danger")
+        else:
+            self.dust_storm.rover_in_storm = False
+            self.was_in_dust_storm = False
+            self.add_log("STORM", "Dust storm deactivated. Atmospheric visibility nominal.", "info")
+
     def step(self, custom_dt: Optional[float] = None) -> None:
         """
         Execute one physical & algorithmic tick.
@@ -237,6 +276,30 @@ class SimulationEngine:
             self.demo_runner.update(dt)
 
         rover_pos = (self.rover.x, self.rover.y)
+
+        # Update dynamic dust storm if active
+        rover_in_storm = False
+        if self.dust_storm.active:
+            self.dust_storm.update(dt, self.terrain.width_m, self.terrain.height_m)
+            rover_in_storm = self.dust_storm.check_inside(self.rover.x, self.rover.y)
+            self.dust_storm.rover_in_storm = rover_in_storm
+
+            if rover_in_storm and not self.was_in_dust_storm:
+                self.add_log(
+                    "STORM",
+                    "⚠️ ROVER ENTERED DUST STORM: Visual Odometry degraded (5x noise), PNT priority elevated",
+                    "danger",
+                )
+            elif not rover_in_storm and self.was_in_dust_storm:
+                self.add_log(
+                    "STORM",
+                    "Rover cleared dust storm perimeter. Visual Odometry tracking nominal ✓",
+                    "success",
+                )
+            self.was_in_dust_storm = rover_in_storm
+        else:
+            self.dust_storm.rover_in_storm = False
+            self.was_in_dust_storm = False
 
         # 1. Update Satellites
         if self.active_mode == NavigationMode.MODE_A:
@@ -276,6 +339,7 @@ class SimulationEngine:
                     self.latest_ekf,
                     hazard_risk_level=hazard_risk,
                     sim_time=self.sim_time,
+                    in_dust_storm=rover_in_storm,
                 )
 
             pnt_sat = self.constellation.get_pnt_satellite()
@@ -299,6 +363,8 @@ class SimulationEngine:
             true_omega=self.rover.angular_velocity,
             wheel_slip=self.rover.wheel_slip,
             pnt_available=pnt_available,
+            in_dust_storm=rover_in_storm,
+            dust_storm_intensity=self.dust_storm.intensity,
         )
 
         # 3. EKF Sensor Fusion Step
@@ -311,6 +377,7 @@ class SimulationEngine:
             terrain_cost=terrain_cost,
             terrain_slope=terrain_slope,
             is_outage=(not pnt_available),
+            in_dust_storm=rover_in_storm,
         )
 
         # 5. AI Trajectory Prediction & Hazard Reconnaissance (Mode C)
@@ -354,6 +421,7 @@ class SimulationEngine:
             try:
                 s_cost = float(self.terrain.get_cost(self.shadow_rover.x, self.shadow_rover.y))
                 s_slope = float(self.terrain.get_slope(self.shadow_rover.x, self.shadow_rover.y))
+                shadow_in_storm = self.dust_storm.check_inside(self.shadow_rover.x, self.shadow_rover.y)
 
                 # Sample sensors for shadow rover with PNT completely denied (Mode A)
                 shadow_meas = self.shadow_sensors.sample(
@@ -368,6 +436,8 @@ class SimulationEngine:
                     true_omega=float(self.shadow_rover.angular_velocity),
                     wheel_slip=float(self.shadow_rover.wheel_slip),
                     pnt_available=False,
+                    in_dust_storm=shadow_in_storm,
+                    dust_storm_intensity=self.dust_storm.intensity,
                 )
 
                 # EKF step for shadow rover (dead reckoning only)
@@ -380,6 +450,7 @@ class SimulationEngine:
                     terrain_cost=s_cost,
                     terrain_slope=s_slope,
                     is_outage=True,
+                    in_dust_storm=shadow_in_storm,
                 )
 
                 # Append to trail
@@ -457,6 +528,8 @@ class SimulationEngine:
             "active_mode": self.active_mode,
             "shadow_race_enabled": self.shadow_race_enabled,
             "shadow_rover": shadow_data,
+            "terrain_preset": self.terrain_preset,
+            "dust_storm": self.dust_storm.to_dict(),
             "mode_meta": ModeConfig.DESCRIPTIONS[self.active_mode],
             "rover": self.rover.to_dict(),
             "satellites": self.constellation.to_list(),
@@ -488,6 +561,7 @@ class SimulationEngine:
             "demo_mission": self.demo_runner.get_status(),
             "logs": self.logs[-40:],  # last 40 entries
             "terrain_summary": {
+                "preset": self.terrain_preset,
                 "width_m": self.terrain.width_m,
                 "height_m": self.terrain.height_m,
                 "start_pos": list(self.terrain.start_pos),

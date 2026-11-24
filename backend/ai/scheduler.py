@@ -40,6 +40,7 @@ class AISatelliteScheduler:
         ekf_telemetry: Dict[str, Any],
         hazard_risk_level: float,  # 0.0 to 1.0 (high if hazard in predicted path)
         sim_time: float,
+        in_dust_storm: bool = False,
     ) -> Dict[str, Any]:
         """
         Run scoring algorithm across all satellites and assign optimal tasks.
@@ -48,8 +49,9 @@ class AISatelliteScheduler:
         is_fallback = ekf_telemetry.get("fallback_active", False)
         rover_speed = rover_telemetry.get("speed", 0.0)
 
-        # 1. Compute Rover Need Score (0 to 1): High if uncertainty is high or in fallback
-        rover_need_score = min(1.0, (uncertainty / 6.0) + (0.4 if is_fallback else 0.0))
+        # 1. Compute Rover Need Score (0 to 1): High if uncertainty is high, in fallback, or in dust storm
+        storm_boost = 0.35 if in_dust_storm else 0.0
+        rover_need_score = min(1.0, (uncertainty / 6.0) + (0.4 if is_fallback else 0.0) + storm_boost)
 
         # 2. Compute Imaging Need Score (0 to 1): High if upcoming hazard risk is high
         imaging_need_score = min(1.0, hazard_risk_level * 0.9 + (0.1 if rover_speed > 1.5 else 0.0))
@@ -130,7 +132,13 @@ class AISatelliteScheduler:
             img_sat = next((s for s in visible_sats if "IMAGING" in s.capabilities), None)
             pnt_sat = next((s for s in visible_sats if "PNT" in s.capabilities and s != img_sat), None)
 
-            if hazard_risk_level > 0.5 and img_sat:
+            if in_dust_storm and pnt_sat:
+                pnt_sat.set_task("PNT", "Prioritized PNT lock to compensate for VO dust occlusion")
+                assigned_tasks[pnt_sat.sat_id] = "PNT"
+                self.selected_satellite_id = pnt_sat.sat_id
+                self.selected_task = "PNT"
+                self.last_reason_summary = f"{pnt_sat.sat_id} locked to PNT (Compensating for active dust storm VO degradation)"
+            elif hazard_risk_level > 0.5 and img_sat:
                 img_sat.set_task("IMAGING", "Assigned for forward hazard reconnaissance")
                 assigned_tasks[img_sat.sat_id] = "IMAGING"
                 self.selected_satellite_id = img_sat.sat_id

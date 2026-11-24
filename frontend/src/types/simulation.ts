@@ -34,6 +34,17 @@ export interface ShadowRoverState {
   mission_status: string;
 }
 
+export interface DustStormState {
+  active: boolean;
+  x: number;
+  y: number;
+  radius: number;
+  intensity: number;
+  vx: number;
+  vy: number;
+  rover_in_storm: boolean;
+}
+
 export interface SatelliteState {
   sat_id: string;
   name: string;
@@ -195,6 +206,8 @@ export interface SimulationFullState {
   active_mode: 'MODE_A' | 'MODE_B' | 'MODE_C';
   shadow_race_enabled: boolean;
   shadow_rover?: ShadowRoverState | null;
+  terrain_preset: 'procedural' | 'jezero_crater';
+  dust_storm: DustStormState;
   mode_meta: {
     name: string;
     tag: string;
@@ -222,6 +235,7 @@ export interface SimulationFullState {
   demo_mission: DemoMissionStatus;
   logs: MissionLogEntry[];
   terrain_summary: {
+    preset?: 'procedural' | 'jezero_crater';
     width_m: number;
     height_m: number;
     start_pos: [number, number];

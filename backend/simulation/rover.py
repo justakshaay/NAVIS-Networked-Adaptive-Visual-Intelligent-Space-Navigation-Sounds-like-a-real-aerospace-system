@@ -104,6 +104,7 @@ class MarsRover:
         terrain_cost: float = 1.0,
         terrain_slope: float = 0.0,
         is_outage: bool = False,
+        in_dust_storm: bool = False,
     ) -> None:
         """
         Step kinematics using pure pursuit along active_path.
@@ -183,6 +184,8 @@ class MarsRover:
 
         # Battery consumption model: base hotel load (10W) + mechanical work (150W * speed * cost)
         power_draw_kw = 0.015 + 0.12 * (self.speed / self.max_speed) * terrain_cost
+        if in_dust_storm:
+            power_draw_kw *= 1.45  # Increased atmospheric resistance & solar dust occlusion
         battery_drain = (power_draw_kw * (dt / 3600.0) / 0.5) * 100.0  # assuming 0.5 kWh pack
         self.battery_pct = max(0.0, self.battery_pct - battery_drain)
 
