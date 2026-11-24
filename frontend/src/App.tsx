@@ -3,6 +3,8 @@ import { useSimulation } from './hooks/useSimulation';
 import { Header } from './components/Header';
 import { MarsCanvas } from './components/MarsCanvas';
 import { MissionControls } from './components/MissionControls';
+import { ReplayBar } from './components/ReplayBar';
+import { DebriefModal } from './components/DebriefModal';
 import { SatellitePanel } from './components/SatellitePanel';
 import { SensorFusionPanel } from './components/SensorFusionPanel';
 import { AIDecisionConsole } from './components/AIDecisionConsole';
@@ -10,6 +12,7 @@ import { TelemetryPanel } from './components/TelemetryPanel';
 import { RealtimeCharts } from './components/RealtimeCharts';
 import { BenchmarkModal } from './components/BenchmarkModal';
 import { DemoScenarioGuide } from './components/DemoScenarioGuide';
+import { generateDebriefData, exportTelemetryCsv } from './utils/exportReport';
 import { Layers, Satellite, Terminal } from 'lucide-react';
 
 const Mars3DView = lazy(() => import('./components/Mars3DView'));
@@ -17,9 +20,19 @@ const Mars3DView = lazy(() => import('./components/Mars3DView'));
 export function App() {
   const {
     state,
+    liveState,
     connected,
     benchmarkResult,
     isBenchmarking,
+    isReplaying,
+    replayIndex,
+    bufferLength,
+    events,
+    isReplayPlaying,
+    telemetryBuffer,
+    scrubTo,
+    returnToLive,
+    toggleReplayPlay,
     startMission,
     pauseMission,
     resetMission,
@@ -37,6 +50,7 @@ export function App() {
   } = useSimulation();
 
   const [isBenchmarkModalOpen, setIsBenchmarkModalOpen] = useState<boolean>(false);
+  const [isDebriefModalOpen, setIsDebriefModalOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'GNC' | 'ORBITAL' | 'AI'>('GNC');
   const [isDemoGuideVisible, setIsDemoGuideVisible] = useState<boolean>(true);
   const [isHazardMode, setIsHazardMode] = useState<boolean>(false);
@@ -74,6 +88,8 @@ export function App() {
         onSetTerrainPreset={setTerrainPreset}
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
+        onOpenDebrief={() => setIsDebriefModalOpen(true)}
+        onExportCsv={() => exportTelemetryCsv(telemetryBuffer, (state || liveState)!)}
       />
 
       {/* 2. Main Cockpit Workspace */}
@@ -117,23 +133,39 @@ export function App() {
             )}
 
             {/* Sleek Minimal Floating Command Dock */}
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-[95%]">
-              <MissionControls
-                state={state}
-                onStart={startMission}
-                onPause={pauseMission}
-                onReset={resetMission}
-                onSpeed={setSpeed}
-                onMode={setMode}
-                onOutage={simulateOutage}
-                onRestore={restoreSatellite}
-                onToggleHazardMode={() => setIsHazardMode((h) => !h)}
-                isHazardModeActive={isHazardMode}
-                onToggleShadowRace={() => toggleShadowRace(!state?.shadow_race_enabled)}
-                onToggleSwarmMode={() => toggleSwarmMode(!state?.swarm_mode_enabled)}
-                onToggleDustStorm={() => toggleDustStorm(!state?.dust_storm?.active)}
-                onRunDemo={runDemo}
-              />
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-[95%] w-full flex flex-col items-center gap-1.5 pointer-events-none">
+              <div className="pointer-events-auto w-full">
+                <ReplayBar
+                  isReplaying={isReplaying}
+                  replayIndex={replayIndex}
+                  bufferLength={bufferLength}
+                  currentTime_s={state?.sim_time || 0}
+                  liveTime_s={liveState?.sim_time || 0}
+                  events={events}
+                  isReplayPlaying={isReplayPlaying}
+                  onScrub={scrubTo}
+                  onTogglePlay={toggleReplayPlay}
+                  onReturnToLive={returnToLive}
+                />
+              </div>
+              <div className="pointer-events-auto">
+                <MissionControls
+                  state={state}
+                  onStart={startMission}
+                  onPause={pauseMission}
+                  onReset={resetMission}
+                  onSpeed={setSpeed}
+                  onMode={setMode}
+                  onOutage={simulateOutage}
+                  onRestore={restoreSatellite}
+                  onToggleHazardMode={() => setIsHazardMode((h) => !h)}
+                  isHazardModeActive={isHazardMode}
+                  onToggleShadowRace={() => toggleShadowRace(!state?.shadow_race_enabled)}
+                  onToggleSwarmMode={() => toggleSwarmMode(!state?.swarm_mode_enabled)}
+                  onToggleDustStorm={() => toggleDustStorm(!state?.dust_storm?.active)}
+                  onRunDemo={runDemo}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -229,6 +261,16 @@ export function App() {
         isBenchmarking={isBenchmarking}
         onRunBenchmark={() => runBenchmark()}
       />
+
+      {/* Flight Debrief / Print Modal */}
+      {isDebriefModalOpen && (state || liveState) && (
+        <DebriefModal
+          summary={generateDebriefData(telemetryBuffer, (state || liveState)!)}
+          rawBuffer={telemetryBuffer}
+          currentState={(state || liveState)!}
+          onClose={() => setIsDebriefModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

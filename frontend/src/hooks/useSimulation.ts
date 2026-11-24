@@ -1,16 +1,121 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SimulationFullState, BenchmarkComparisonResult } from '../types/simulation';
 
+export interface TimelineEventMarker {
+  id: string;
+  type: 'HAZARD' | 'OUTAGE' | 'STORM' | 'REPLAN' | 'SWARM';
+  label: string;
+  sim_time: number;
+  frameIndex: number;
+  color: string;
+}
+
 export function useSimulation() {
-  const [state, setState] = useState<SimulationFullState | null>(null);
+  const [liveState, setLiveState] = useState<SimulationFullState | null>(null);
   const [connected, setConnected] = useState<boolean>(false);
   const [benchmarkResult, setBenchmarkResult] = useState<BenchmarkComparisonResult | null>(null);
   const [isBenchmarking, setIsBenchmarking] = useState<boolean>(false);
+
+  // Black-Box Telemetry Ring Buffer (up to 1,200 frames / 60 seconds at 20Hz)
+  const telemetryBufferRef = useRef<SimulationFullState[]>([]);
+  const [bufferLength, setBufferLength] = useState<number>(0);
+  const [events, setEvents] = useState<TimelineEventMarker[]>([]);
+
+  // Scrub & Replay State
+  const [isReplaying, setIsReplaying] = useState<boolean>(false);
+  const [replayIndex, setReplayIndex] = useState<number>(0);
+  const [isReplayPlaying, setIsReplayPlaying] = useState<boolean>(false);
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
   // Dynamic API & WS Base Resolution
   const apiBase = typeof window !== 'undefined' && window.location.port === '5173' ? 'http://127.0.0.1:8000' : '';
+
+  // Process incoming simulation snapshot
+  const processNewSnapshot = useCallback((data: SimulationFullState) => {
+    setLiveState(data);
+
+    const buf = telemetryBufferRef.current;
+    const prev = buf.length > 0 ? buf[buf.length - 1] : null;
+
+    buf.push(data);
+    if (buf.length > 1200) {
+      buf.shift();
+    }
+    setBufferLength(buf.length);
+
+    // Event detection markers
+    if (prev) {
+      // 1. Hazard Injected
+      const prevHz = prev.terrain_summary?.injected_hazards?.length ?? 0;
+      const currHz = data.terrain_summary?.injected_hazards?.length ?? 0;
+      if (currHz > prevHz) {
+        setEvents((evts) => [
+          ...evts.slice(-30),
+          {
+            id: `hz-${Date.now()}`,
+            type: 'HAZARD',
+            label: 'HAZARD INJECTED',
+            sim_time: data.sim_time,
+            frameIndex: buf.length - 1,
+            color: '#D29922',
+          },
+        ]);
+      }
+
+      // 2. Outage Injected
+      const prevOutage = prev.satellites.some((s) => s.is_outage);
+      const currOutage = data.satellites.some((s) => s.is_outage);
+      if (currOutage && !prevOutage) {
+        setEvents((evts) => [
+          ...evts.slice(-30),
+          {
+            id: `out-${Date.now()}`,
+            type: 'OUTAGE',
+            label: 'SATELLITE OUTAGE',
+            sim_time: data.sim_time,
+            frameIndex: buf.length - 1,
+            color: '#F85149',
+          },
+        ]);
+      }
+
+      // 3. Dust Storm Hit
+      const prevStorm = prev.dust_storm?.active ?? false;
+      const currStorm = data.dust_storm?.active ?? false;
+      if (currStorm && !prevStorm) {
+        setEvents((evts) => [
+          ...evts.slice(-30),
+          {
+            id: `stm-${Date.now()}`,
+            type: 'STORM',
+            label: 'DUST STORM HIT',
+            sim_time: data.sim_time,
+            frameIndex: buf.length - 1,
+            color: '#F59E0B',
+          },
+        ]);
+      }
+
+      // 4. Swarm Deployed
+      const prevSwarm = prev.swarm_mode_enabled ?? false;
+      const currSwarm = data.swarm_mode_enabled ?? false;
+      if (currSwarm && !prevSwarm) {
+        setEvents((evts) => [
+          ...evts.slice(-30),
+          {
+            id: `swm-${Date.now()}`,
+            type: 'SWARM',
+            label: 'SWARM DEPLOYED',
+            sim_time: data.sim_time,
+            frameIndex: buf.length - 1,
+            color: '#BC8CFF',
+          },
+        ]);
+      }
+    }
+  }, []);
 
   // Connect to WebSocket
   const connectWs = useCallback(() => {
@@ -31,7 +136,7 @@ export function useSimulation() {
       ws.onmessage = (event) => {
         try {
           const data: SimulationFullState = JSON.parse(event.data);
-          setState(data);
+          processNewSnapshot(data);
         } catch (err) {
           console.error('Error parsing simulation WebSocket message:', err);
         }
@@ -53,7 +158,7 @@ export function useSimulation() {
       console.error('Failed to create WebSocket:', e);
       reconnectTimeoutRef.current = window.setTimeout(connectWs, 2000);
     }
-  }, []);
+  }, [processNewSnapshot]);
 
   useEffect(() => {
     connectWs();
@@ -71,14 +176,49 @@ export function useSimulation() {
         const res = await fetch(`${apiBase}/api/simulation/state`);
         if (res.ok) {
           const data = await res.json();
-          setState(data);
+          processNewSnapshot(data);
         }
       } catch {
         // server might still be booting
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [connected, apiBase]);
+  }, [connected, apiBase, processNewSnapshot]);
+
+  // Replay playback timer
+  useEffect(() => {
+    if (!isReplaying || !isReplayPlaying) return;
+    const interval = setInterval(() => {
+      setReplayIndex((idx) => {
+        if (idx >= telemetryBufferRef.current.length - 1) {
+          setIsReplayPlaying(false);
+          return idx;
+        }
+        return idx + 1;
+      });
+    }, 50); // 20 Hz step
+    return () => clearInterval(interval);
+  }, [isReplaying, isReplayPlaying]);
+
+  // Scrub and Replay controls
+  const scrubTo = useCallback((index: number) => {
+    setIsReplaying(true);
+    setReplayIndex(Math.max(0, Math.min(telemetryBufferRef.current.length - 1, index)));
+  }, []);
+
+  const returnToLive = useCallback(() => {
+    setIsReplaying(false);
+    setIsReplayPlaying(false);
+  }, []);
+
+  const toggleReplayPlay = useCallback(() => {
+    setIsReplayPlaying((p) => !p);
+  }, []);
+
+  // Effective state: historical frame when replaying, live frame otherwise
+  const state: SimulationFullState | null = isReplaying
+    ? telemetryBufferRef.current[replayIndex] || liveState
+    : liveState;
 
   // Send Command Helper
   const sendCommand = useCallback((cmd: Record<string, any>) => {
@@ -192,9 +332,19 @@ export function useSimulation() {
 
   return {
     state,
+    liveState,
     connected,
     benchmarkResult,
     isBenchmarking,
+    isReplaying,
+    replayIndex,
+    bufferLength,
+    events,
+    isReplayPlaying,
+    telemetryBuffer: telemetryBufferRef.current,
+    scrubTo,
+    returnToLive,
+    toggleReplayPlay,
     startMission,
     pauseMission,
     resetMission,
