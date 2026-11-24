@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, Zap, ZapOff, AlertOctagon, FastForward, Cpu, Compass, Swords, Wind } from 'lucide-react';
+import { Play, Pause, RotateCcw, Zap, ZapOff, AlertOctagon, FastForward, Cpu, Compass, Swords, Wind, Users } from 'lucide-react';
 import { SimulationFullState } from '../types/simulation';
 
 interface MissionControlsProps {
@@ -14,6 +14,7 @@ interface MissionControlsProps {
   onToggleHazardMode: () => void;
   isHazardModeActive: boolean;
   onToggleShadowRace?: () => void;
+  onToggleSwarmMode?: () => void;
   onToggleDustStorm?: () => void;
   onRunDemo: () => void;
 }
@@ -30,6 +31,7 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
   onToggleHazardMode,
   isHazardModeActive,
   onToggleShadowRace,
+  onToggleSwarmMode,
   onToggleDustStorm,
 }) => {
   const isRunning = state?.is_running || false;
@@ -37,6 +39,7 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
   const currentSpeed = state?.speed_multiplier || 1.0;
   const currentMode = state?.active_mode || 'MODE_C';
   const isShadowRace = state?.shadow_race_enabled || false;
+  const isSwarmMode = state?.swarm_mode_enabled || false;
   const isDustStorm = state?.dust_storm?.active || false;
 
   return (
@@ -110,6 +113,12 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
             <span className="w-1.5 h-1.5 rounded-full bg-[#F85149] animate-pulse" />
             <span>RACE LOCKED: MODE A vs MODE C</span>
           </div>
+        ) : isSwarmMode ? (
+          /* Swarm Active Badge */
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#58A6FF]/15 border border-[#58A6FF] text-[#58A6FF] rounded-[2px] font-bold text-[10px] tracking-wide">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#58A6FF] animate-pulse" />
+            <span>SWARM ACTIVE: 3 ROVERS (ALPHA, BETA, GAMMA)</span>
+          </div>
         ) : (
           /* Normal Mode A/B/C Switcher */
           <div className="flex items-center bg-[#080A0D] border border-[#21262D] rounded-[2px] p-0.5 gap-0.5">
@@ -164,6 +173,22 @@ export const MissionControls: React.FC<MissionControlsProps> = ({
           >
             <Swords className="w-3.5 h-3.5" />
             <span>{isShadowRace ? 'EXIT RACE' : 'SHADOW RACE (A vs C)'}</span>
+          </button>
+        )}
+
+        {/* Swarm Mode (3 Rovers) Toggle Button */}
+        {onToggleSwarmMode && (
+          <button
+            onClick={onToggleSwarmMode}
+            className={`btn-control font-bold transition-colors duration-150 ${
+              isSwarmMode
+                ? 'bg-[#58A6FF] text-[#080A0D] border-[#58A6FF]'
+                : 'bg-[#161B22] text-[#58A6FF] border-[#58A6FF]/60 hover:bg-[#58A6FF]/15'
+            }`}
+            title="Deploy 3-rover swarm (Alpha, Beta, Gamma) competing for dynamic 4-satellite orbital contention"
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>{isSwarmMode ? 'EXIT SWARM' : 'SWARM (3 ROVERS)'}</span>
           </button>
         )}
       </div>

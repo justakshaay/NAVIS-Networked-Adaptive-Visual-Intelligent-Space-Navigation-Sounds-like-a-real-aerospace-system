@@ -28,6 +28,7 @@ export function App() {
     injectHazard,
     runDemo,
     toggleShadowRace,
+    toggleSwarmMode,
     setTerrainPreset,
     toggleDustStorm,
     runBenchmark,
@@ -111,6 +112,7 @@ export function App() {
                 onToggleHazardMode={() => setIsHazardMode((h) => !h)}
                 isHazardModeActive={isHazardMode}
                 onToggleShadowRace={() => toggleShadowRace(!state?.shadow_race_enabled)}
+                onToggleSwarmMode={() => toggleSwarmMode(!state?.swarm_mode_enabled)}
                 onToggleDustStorm={() => toggleDustStorm(!state?.dust_storm?.active)}
                 onRunDemo={runDemo}
               />

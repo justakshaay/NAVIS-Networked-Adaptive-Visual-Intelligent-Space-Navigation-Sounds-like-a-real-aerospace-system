@@ -144,6 +144,25 @@ async def test_e2e_websocket():
         await ws.send(json.dumps({"action": "set_terrain", "preset": "procedural"}))
         print("[OK] Cleared dust storm and restored procedural terrain.")
 
+        # 9. Test Multi-Rover Swarm Mode & Satellite Contention
+        await ws.send(json.dumps({"action": "toggle_swarm_mode", "enabled": True}))
+        print("[OK] Toggled Swarm Mode ON via WebSocket...")
+
+        for _ in range(30):
+            msg = await ws.recv()
+            state = json.loads(msg)
+
+        assert state.get("swarm_mode_enabled") is True
+        assert state.get("is_running") is True
+        assert "swarm_rovers" in state
+        assert len(state["swarm_rovers"]) == 3
+        print(f"[OK] Swarm telemetry received: {len(state['swarm_rovers'])} rovers live!")
+        for sr in state["swarm_rovers"]:
+            print(f"     - {sr['rover_id']} ({sr['callsign']} / {sr['role']}): pos=({sr['true_pos'][0]:.1f}, {sr['true_pos'][1]:.1f}), sat={sr['assigned_satellite_id']}")
+
+        await ws.send(json.dumps({"action": "toggle_swarm_mode", "enabled": False}))
+        print("[OK] Toggled Swarm Mode OFF.")
+
     print("\n[SUCCESS] E2E WEBSOCKET & SIMULATION CONTROLS FULLY VERIFIED!")
 
 

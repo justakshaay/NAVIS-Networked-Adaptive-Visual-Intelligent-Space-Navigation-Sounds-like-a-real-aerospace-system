@@ -144,6 +144,15 @@ export function useSimulation() {
     }).catch(() => {});
   }, [sendCommand, apiBase]);
 
+  const toggleSwarmMode = useCallback((enabled: boolean) => {
+    sendCommand({ action: 'toggle_swarm_mode', enabled });
+    fetch(`${apiBase}/api/simulation/swarm_mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }).catch(() => {});
+  }, [sendCommand, apiBase]);
+
   const setTerrainPreset = useCallback((preset: 'procedural' | 'jezero_crater') => {
     sendCommand({ action: 'set_terrain', preset });
     fetch(`${apiBase}/api/simulation/terrain`, {
@@ -196,6 +205,7 @@ export function useSimulation() {
     injectHazard,
     runDemo,
     toggleShadowRace,
+    toggleSwarmMode,
     setTerrainPreset,
     toggleDustStorm,
     runBenchmark,

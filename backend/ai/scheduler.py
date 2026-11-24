@@ -4,7 +4,8 @@ Allocates constrained satellite constellation resources (PNT, IMAGING, COMMUNICA
 using multi-criteria explainable scoring.
 """
 
-from typing import Dict, List, Any, Optional
+import math
+from typing import Dict, List, Any, Optional, Set, Tuple
 
 from backend.simulation.satellites import Satellite
 
@@ -32,6 +33,7 @@ class AISatelliteScheduler:
         self.selected_satellite_id: Optional[str] = None
         self.selected_task: str = "IDLE"
         self.last_reason_summary: str = ""
+        self.previous_swarm_assignments: Dict[str, Optional[str]] = {}
 
     def evaluate_and_schedule(
         self,
@@ -181,4 +183,133 @@ class AISatelliteScheduler:
             "sub_scores": sub_scores,
             "explanations": explanations,
             "assigned_tasks": assigned_tasks,
+        }
+
+    def evaluate_and_schedule_swarm(
+        self,
+        satellites: Dict[str, Satellite],
+        swarm_rovers: Dict[str, Any],
+        sim_time: float,
+        dust_storm: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """
+        Multi-rover satellite contention scheduling.
+        Allocates visible satellites among 3 competing rovers (Alpha, Beta, Gamma)
+        based on:
+        - Rover Mission Priority (Alpha 1.25, Beta 1.0, Gamma 0.85)
+        - Rover EKF Uncertainty & Drift Risk (urgency for PNT lock)
+        - Dust Storm VO Degradation (compensate with orbital PNT)
+        - Elevation & Geometric Dilution of Precision (GDOP)
+        - Satellite capabilities (PNT, IMAGING, COMMUNICATION)
+        """
+        candidates: List[Tuple[float, str, str, str, float, float]] = []
+        # (utility_score, sat_id, rover_id, task, norm_elevation, urgency)
+
+        for sat_id, sat in satellites.items():
+            if sat.is_outage_forced:
+                sat.score = 0.0
+                sat.set_task("IDLE", "Constellation forced outage", None)
+                self.previous_swarm_assignments[sat_id] = None
+                continue
+
+            for r_id, r_info in swarm_rovers.items():
+                r_pos = (float(r_info["rover"].x), float(r_info["rover"].y))
+                if not sat.is_visible_to_pos(r_pos):
+                    continue
+
+                ground_dist = math.hypot(sat.gx - r_pos[0], sat.gy - r_pos[1])
+                elevation = math.degrees(math.atan2(sat.altitude_km * 1000.0, max(1.0, ground_dist)))
+                norm_elev = min(1.0, max(0.0, (elevation - 18.0) / 72.0))
+
+                # Rover need & drift urgency
+                uncert = float(r_info["latest_uncertainty"])
+                in_storm = bool(r_info.get("in_storm", False))
+                prio = float(r_info.get("priority", 1.0))
+
+                urgency = min(1.0, (uncert / 4.5) + (0.45 if in_storm else 0.0) + (0.2 if prio > 1.1 else 0.0))
+
+                # PNT Candidate
+                if "PNT" in sat.capabilities:
+                    pnt_score = 0.35 * norm_elev + 0.40 * urgency + 0.25 * (prio / 1.25)
+                    candidates.append((pnt_score, sat_id, r_id, "PNT", norm_elev, urgency))
+
+                # IMAGING Candidate
+                if "IMAGING" in sat.capabilities:
+                    img_score = 0.35 * norm_elev + 0.35 * (0.6 if in_storm else 0.3) + 0.30 * (prio / 1.25)
+                    candidates.append((img_score, sat_id, r_id, "IMAGING", norm_elev, urgency))
+
+                # COMMUNICATION Candidate
+                if "COMMUNICATION" in sat.capabilities:
+                    comm_score = 0.40 * norm_elev + 0.35 * 0.4 + 0.25 * (prio / 1.25)
+                    candidates.append((comm_score, sat_id, r_id, "COMMUNICATION", norm_elev, urgency))
+
+        # Sort candidates descending by utility
+        candidates.sort(key=lambda c: c[0], reverse=True)
+
+        assigned_sats: Set[str] = set()
+        rover_pnt_assigned: Dict[str, str] = {}
+        assigned_tasks: Dict[str, str] = {}
+        target_rovers: Dict[str, str] = {}
+        reassignment_logs: List[str] = []
+
+        # Pass 1: Ensure fair PNT distribution across high-need rovers
+        for score, sat_id, r_id, task, norm_elev, urgency in candidates:
+            if sat_id in assigned_sats:
+                continue
+            if task == "PNT" and r_id in rover_pnt_assigned:
+                continue
+
+            assigned_sats.add(sat_id)
+            if task == "PNT":
+                rover_pnt_assigned[r_id] = sat_id
+
+            sat = satellites[sat_id]
+            sat.score = float(round(score, 3))
+            assigned_tasks[sat_id] = task
+            target_rovers[sat_id] = r_id
+            r_callsign = swarm_rovers[r_id].get("callsign", r_id)
+            reason = f"Swarm: Allocated to {r_id} ({r_callsign}) for {task} [Prio {swarm_rovers[r_id].get('priority', 1.0):.2f}, Urg {urgency:.2f}]"
+            sat.set_task(task, reason, target_rover_id=r_id)
+
+            prev = self.previous_swarm_assignments.get(sat_id)
+            if prev and prev != r_id:
+                prev_callsign = swarm_rovers.get(prev, {}).get("callsign", prev)
+                if urgency > 0.4 or swarm_rovers[r_id].get("in_storm"):
+                    msg = f"{sat_id} reassigned from {prev} ({prev_callsign}) → {r_id} ({r_callsign}) [{task}] due to 2σ uncertainty drift spike"
+                else:
+                    msg = f"{sat_id} dynamic orbital handoff from {prev} ({prev_callsign}) → {r_id} ({r_callsign}) [{task}]"
+                reassignment_logs.append(msg)
+
+            self.previous_swarm_assignments[sat_id] = r_id
+
+        # Pass 2: Fill any unassigned visible satellites with remaining best tasks
+        for score, sat_id, r_id, task, norm_elev, urgency in candidates:
+            if sat_id in assigned_sats:
+                continue
+
+            assigned_sats.add(sat_id)
+            sat = satellites[sat_id]
+            sat.score = float(round(score, 3))
+            assigned_tasks[sat_id] = task
+            target_rovers[sat_id] = r_id
+            r_callsign = swarm_rovers[r_id].get("callsign", r_id)
+            reason = f"Swarm Secondary: {r_id} ({r_callsign}) [{task}]"
+            sat.set_task(task, reason, target_rover_id=r_id)
+            self.previous_swarm_assignments[sat_id] = r_id
+
+        # Idle any remaining satellites
+        for sat_id, sat in satellites.items():
+            if sat_id not in assigned_sats and not sat.is_outage_forced:
+                sat.score = 0.05
+                sat.set_task("IDLE", "Standby in orbital pass", target_rover_id=None)
+                self.previous_swarm_assignments[sat_id] = None
+
+        summary_reason = f"Multi-Rover Contention: {len(assigned_sats)}/4 orbiters dynamically allocated across 3 rovers"
+
+        return {
+            "assigned_tasks": assigned_tasks,
+            "target_rovers": target_rovers,
+            "reassignment_logs": reassignment_logs,
+            "reason_summary": summary_reason,
+            "scores": {s_id: s.score for s_id, s in satellites.items()},
         }

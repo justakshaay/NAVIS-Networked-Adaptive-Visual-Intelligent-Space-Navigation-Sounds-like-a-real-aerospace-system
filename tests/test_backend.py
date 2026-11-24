@@ -153,11 +153,37 @@ def test_jezero_crater_and_dust_storm():
     print("[OK] Dust storm fault injection & clearing verified.")
 
 
+def test_swarm_mode():
+    print("Testing Multi-Rover Swarm & Satellite Contention...")
+    engine = SimulationEngine(seed=42)
+    engine.toggle_swarm_mode(True)
+    assert engine.swarm_mode_enabled is True
+    assert len(engine.swarm_rovers) == 3
+    assert "ROVER-1" in engine.swarm_rovers
+    assert "ROVER-2" in engine.swarm_rovers
+    assert "ROVER-3" in engine.swarm_rovers
+
+    # Step simulation forward 20 ticks
+    for _ in range(20):
+        engine.step(0.05)
+
+    state = engine.get_full_state()
+    assert state["swarm_mode_enabled"] is True
+    assert len(state["swarm_rovers"]) == 3
+    assigned_rovers = [s.get("target_rover_id") for s in state["satellites"] if s.get("target_rover_id")]
+    print(f"[OK] Swarm running: 3 rovers active. Satellite assignments: {assigned_rovers}")
+
+    engine.toggle_swarm_mode(False)
+    assert engine.swarm_mode_enabled is False
+    print("[OK] Multi-rover swarm mode toggle & stepping verified.")
+
+
 if __name__ == "__main__":
     test_terrain_and_planner()
     test_ekf_and_sensors()
     test_ai_scheduler_and_trajectory()
     test_simulation_engine_and_benchmark()
     test_jezero_crater_and_dust_storm()
+    test_swarm_mode()
     print("\nALL BACKEND VERIFICATION TESTS PASSED SUCCESSFULLY!")
 

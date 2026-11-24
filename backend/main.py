@@ -42,6 +42,10 @@ class ShadowRaceRequest(BaseModel):
     enabled: bool = True
 
 
+class SwarmModeRequest(BaseModel):
+    enabled: bool = True
+
+
 class TerrainPresetRequest(BaseModel):
     preset: str = "procedural"
 
@@ -202,6 +206,16 @@ async def toggle_shadow_race_api(req: ShadowRaceRequest):
     }
 
 
+@app.post("/api/simulation/swarm_mode")
+async def toggle_swarm_mode_api(req: SwarmModeRequest):
+    engine.toggle_swarm_mode(req.enabled)
+    return {
+        "status": "SUCCESS",
+        "swarm_mode_enabled": engine.swarm_mode_enabled,
+        "is_running": engine.is_running,
+    }
+
+
 @app.post("/api/simulation/terrain")
 async def set_terrain_preset_api(req: TerrainPresetRequest):
     engine.set_terrain_preset(req.preset)
@@ -353,6 +367,10 @@ async def websocket_simulation_endpoint(websocket: WebSocket):
                     raw_en = cmd.get("enabled", True)
                     en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))
                     engine.toggle_shadow_race(en)
+                elif action == "toggle_swarm_mode":
+                    raw_en = cmd.get("enabled", True)
+                    en = raw_en if isinstance(raw_en, bool) else (str(raw_en).lower() in ("true", "1", "yes"))
+                    engine.toggle_swarm_mode(en)
                 elif action == "set_terrain":
                     engine.set_terrain_preset(cmd.get("preset", "procedural"))
                 elif action == "toggle_dust_storm":

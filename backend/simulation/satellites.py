@@ -63,6 +63,16 @@ class Satellite:
         self.is_outage_forced = False
         self.score = 0.0
         self.decision_reason = ""
+        self.target_rover_id: Optional[str] = "ROVER-1"
+
+    def is_visible_to_pos(self, pos: Tuple[float, float]) -> bool:
+        """Check if satellite has line-of-sight and elevation angle >= 18 deg to arbitrary ground position."""
+        if self.is_outage_forced:
+            return False
+        ground_dist = math.hypot(self.gx - pos[0], self.gy - pos[1])
+        alt_m = self.altitude_km * 1000.0
+        elevation = math.degrees(math.atan2(alt_m, max(1.0, ground_dist)))
+        return (ground_dist <= self.fov_radius_m) and (elevation >= 18.0)
 
     def update_orbit(
         self,
@@ -116,10 +126,12 @@ class Satellite:
             task_drain = 0.25 if self.current_task != SatelliteTask.IDLE else 0.08
             self.battery_pct = max(15.0, self.battery_pct - task_drain * dt)
 
-    def set_task(self, task: str, reason: str = "") -> None:
+    def set_task(self, task: str, reason: str = "", target_rover_id: Optional[str] = None) -> None:
         """Assign mission task."""
         self.current_task = task
         self.decision_reason = reason
+        if target_rover_id is not None:
+            self.target_rover_id = target_rover_id
 
     def force_outage(self, outage: bool = True) -> None:
         """Force artificial outage for test scenarios."""
@@ -148,6 +160,7 @@ class Satellite:
             "score": float(round(self.score, 3)),
             "decision_reason": self.decision_reason,
             "capabilities": self.capabilities,
+            "target_rover_id": getattr(self, "target_rover_id", None),
         }
 
 

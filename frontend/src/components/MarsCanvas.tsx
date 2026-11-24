@@ -550,45 +550,156 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
       ctx.restore();
     }
 
-    // 7c. Rover Chassis
-    ctx.save();
-    ctx.translate(rx, ry);
-    ctx.rotate(heading);
+    // 7c. Rover Chassis (Swarm or Single)
+    if (state.swarm_mode_enabled && state.swarm_rovers && state.swarm_rovers.length > 0) {
+      for (const sr of state.swarm_rovers) {
+        const srX = toCanvasX(sr.true_pos[0]);
+        const srY = toCanvasY(sr.true_pos[1]);
+        const srEkfX = toCanvasX(sr.ekf_pos[0]);
+        const srEkfY = toCanvasY(sr.ekf_pos[1]);
+        const srHeading = sr.heading;
+        const srColor = sr.color || '#58A6FF';
 
-    ctx.fillStyle = '#161B22';
-    ctx.fillRect(-8, -6, 16, 12);
-    ctx.strokeStyle = '#58A6FF';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(-8, -6, 16, 12);
+        // Swarm Rover Trail
+        if (sr.trail && sr.trail.length > 1) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(toCanvasX(sr.trail[0][0]), toCanvasY(sr.trail[0][1]));
+          for (let i = 1; i < sr.trail.length; i++) {
+            ctx.lineTo(toCanvasX(sr.trail[i][0]), toCanvasY(sr.trail[i][1]));
+          }
+          ctx.strokeStyle = srColor;
+          ctx.globalAlpha = 0.55;
+          ctx.lineWidth = 1.4;
+          ctx.setLineDash([3, 3]);
+          ctx.stroke();
+          ctx.restore();
+        }
 
-    ctx.fillStyle = '#080A0D';
-    ctx.strokeStyle = '#30363D';
-    ctx.lineWidth = 1;
-    const wheelPositions = [
-      [-6, -8], [0, -8], [6, -8],
-      [-6, 6], [0, 6], [6, 6],
-    ];
-    for (const [wx, wy] of wheelPositions) {
-      ctx.fillRect(wx - 2.5, wy, 5, 2);
-      ctx.strokeRect(wx - 2.5, wy, 5, 2);
+        // Swarm Rover Planned Path
+        if (sr.path && sr.path.length > 1) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(toCanvasX(sr.path[0][0]), toCanvasY(sr.path[0][1]));
+          for (let i = 1; i < sr.path.length; i++) {
+            ctx.lineTo(toCanvasX(sr.path[i][0]), toCanvasY(sr.path[i][1]));
+          }
+          ctx.strokeStyle = srColor;
+          ctx.globalAlpha = 0.35;
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([2, 4]);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Swarm Rover EKF 2σ Uncertainty Ring
+        if (layerEKF) {
+          ctx.save();
+          const uncRadius = Math.max(3, toWorldDist(sr.uncertainty_m));
+          ctx.beginPath();
+          ctx.arc(srEkfX, srEkfY, uncRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = srColor;
+          ctx.globalAlpha = 0.6;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Swarm Rover Chassis
+        ctx.save();
+        ctx.translate(srX, srY);
+        ctx.rotate(srHeading);
+
+        ctx.fillStyle = '#161B22';
+        ctx.fillRect(-8, -6, 16, 12);
+        ctx.strokeStyle = srColor;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-8, -6, 16, 12);
+
+        // Wheels
+        ctx.fillStyle = '#080A0D';
+        ctx.strokeStyle = '#30363D';
+        ctx.lineWidth = 1;
+        const wheelPositions = [
+          [-6, -8], [0, -8], [6, -8],
+          [-6, 6], [0, 6], [6, 6],
+        ];
+        for (const [wx, wy] of wheelPositions) {
+          ctx.fillRect(wx - 2.5, wy, 5, 2);
+          ctx.strokeRect(wx - 2.5, wy, 5, 2);
+        }
+
+        // Direction Pointer
+        ctx.fillStyle = srColor;
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(5, -3);
+        ctx.lineTo(5, 3);
+        ctx.closePath();
+        ctx.fill();
+
+        // Center Core Light
+        ctx.fillStyle = sr.in_storm ? '#D29922' : sr.assigned_satellite_id ? '#2EA043' : '#F85149';
+        ctx.beginPath();
+        ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+
+        // Swarm Rover Label & Readout
+        ctx.save();
+        ctx.fillStyle = srColor;
+        ctx.font = 'bold 9px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${sr.callsign.toUpperCase()} [${sr.role.toUpperCase()}]`, srX, srY - 14);
+
+        ctx.font = '8px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#8B949E';
+        const satTag = sr.assigned_satellite_id ? `SAT: ${sr.assigned_satellite_id}` : 'DR ONLY';
+        ctx.fillText(`±${sr.uncertainty_m.toFixed(1)}m | ${sr.speed.toFixed(1)}m/s | ${satTag}`, srX, srY + 18);
+        ctx.restore();
+      }
+    } else {
+      ctx.save();
+      ctx.translate(rx, ry);
+      ctx.rotate(heading);
+
+      ctx.fillStyle = '#161B22';
+      ctx.fillRect(-8, -6, 16, 12);
+      ctx.strokeStyle = '#58A6FF';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-8, -6, 16, 12);
+
+      ctx.fillStyle = '#080A0D';
+      ctx.strokeStyle = '#30363D';
+      ctx.lineWidth = 1;
+      const wheelPositions = [
+        [-6, -8], [0, -8], [6, -8],
+        [-6, 6], [0, 6], [6, 6],
+      ];
+      for (const [wx, wy] of wheelPositions) {
+        ctx.fillRect(wx - 2.5, wy, 5, 2);
+        ctx.strokeRect(wx - 2.5, wy, 5, 2);
+      }
+
+      // Direction Mast
+      ctx.fillStyle = '#F85149';
+      ctx.beginPath();
+      ctx.moveTo(10, 0);
+      ctx.lineTo(5, -3);
+      ctx.lineTo(5, 3);
+      ctx.closePath();
+      ctx.fill();
+
+      // Center Core Light
+      ctx.fillStyle = state.ekf.fallback_active ? '#F85149' : '#2EA043';
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
     }
-
-    // Direction Mast
-    ctx.fillStyle = '#F85149';
-    ctx.beginPath();
-    ctx.moveTo(10, 0);
-    ctx.lineTo(5, -3);
-    ctx.lineTo(5, 3);
-    ctx.closePath();
-    ctx.fill();
-
-    // Center Core Light
-    ctx.fillStyle = state.ekf.fallback_active ? '#F85149' : '#2EA043';
-    ctx.beginPath();
-    ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
 
     // 7d. Shadow Rover (Mode A Dead Reckoning Ghost) if Shadow Race is Active
     if (state.shadow_race_enabled && state.shadow_rover) {
@@ -703,10 +814,20 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
 
         // Active Communication Beam
         if (sat.is_visible && !sat.is_outage && sat.current_task !== 'IDLE') {
+          let beamTargetX = rx;
+          let beamTargetY = ry;
+          if (state.swarm_mode_enabled && state.swarm_rovers && sat.target_rover_id) {
+            const targetRover = state.swarm_rovers.find((r) => r.rover_id === sat.target_rover_id);
+            if (targetRover) {
+              beamTargetX = toCanvasX(targetRover.true_pos[0]);
+              beamTargetY = toCanvasY(targetRover.true_pos[1]);
+            }
+          }
+
           ctx.save();
           ctx.beginPath();
           ctx.moveTo(satX, satY);
-          ctx.lineTo(rx, ry);
+          ctx.lineTo(beamTargetX, beamTargetY);
 
           if (sat.current_task === 'PNT') {
             ctx.strokeStyle = 'rgba(88, 166, 255, 0.7)';
@@ -1089,6 +1210,33 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
           </div>
         )}
 
+        {/* 2c. LIVE MULTI-ROVER SWARM STATUS STRIP */}
+        {state?.swarm_mode_enabled && state?.swarm_rovers && state.swarm_rovers.length > 0 && (
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20 flex flex-wrap items-center justify-center gap-3 px-3 py-1 bg-[#0F1217]/95 backdrop-blur-md border border-[#58A6FF]/60 rounded-[2px] shadow-panel font-mono text-xs select-none">
+            {state.swarm_rovers.map((sr, idx) => (
+              <React.Fragment key={sr.rover_id}>
+                {idx > 0 && <div className="w-[1px] h-4 bg-[#21262D] hidden sm:block" />}
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-[1px]" style={{ backgroundColor: sr.color }} />
+                  <span className="font-bold text-[11px]" style={{ color: sr.color }}>
+                    {sr.callsign.toUpperCase()} ({sr.role}):
+                  </span>
+                  <span className="text-[#E6EDF3] font-semibold tabular-nums">
+                    {sr.localization_error.toFixed(1)}m Err
+                  </span>
+                  <span className={`text-[10px] px-1 py-0.2 rounded-[1px] border font-bold ${
+                    sr.assigned_satellite_id
+                      ? 'border-[#2EA043]/40 text-[#2EA043] bg-[#2EA043]/10'
+                      : 'border-[#F85149]/40 text-[#F85149] bg-[#F85149]/10'
+                  }`}>
+                    {sr.assigned_satellite_id ? `LOCKED: ${sr.assigned_satellite_id}` : 'DR NO-PNT'}
+                  </span>
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+
         {/* 3. TACTICAL CONTROLS & LAYERS POPOVER (Top-Right) */}
         <div className="absolute top-2 right-2 z-20 flex items-center gap-1">
           {/* Layers Popover Button */}
@@ -1237,6 +1385,23 @@ export const MarsCanvas: React.FC<MarsCanvasProps> = ({
                 <div className="flex items-center gap-2 pt-1 border-t border-[#21262D]">
                   <span className="w-3 h-2 rounded-full border border-dashed border-[#F59E0B] bg-[#D97706]/20 inline-block" />
                   <span className="text-[#F59E0B] font-semibold">Dust Storm Zone (VO Occlusion)</span>
+                </div>
+              )}
+              {state?.swarm_mode_enabled && (
+                <div className="pt-1.5 border-t border-[#21262D] space-y-1">
+                  <div className="text-[9px] uppercase tracking-wider text-[#8B949E] font-semibold">Swarm Units:</div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2 rounded-[1px] bg-[#58A6FF] inline-block" />
+                    <span className="text-[#58A6FF] font-semibold">ROVER-1 (Alpha / Scout) [1.25x]</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2 rounded-[1px] bg-[#2EA043] inline-block" />
+                    <span className="text-[#2EA043] font-semibold">ROVER-2 (Beta / Sampler) [1.0x]</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2 rounded-[1px] bg-[#BC8CFF] inline-block" />
+                    <span className="text-[#BC8CFF] font-semibold">ROVER-3 (Gamma / Hauler) [0.85x]</span>
+                  </div>
                 </div>
               )}
             </div>

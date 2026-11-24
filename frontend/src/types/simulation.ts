@@ -34,6 +34,26 @@ export interface ShadowRoverState {
   mission_status: string;
 }
 
+export interface SwarmRoverState {
+  rover_id: string;
+  callsign: string;
+  role: string;
+  color: string;
+  priority: number;
+  true_pos: [number, number];
+  ekf_pos: [number, number];
+  heading: number;
+  speed: number;
+  battery_pct: number;
+  uncertainty_m: number;
+  localization_error: number;
+  in_storm: boolean;
+  assigned_satellite_id: string | null;
+  path: Array<[number, number]>;
+  trail: Array<[number, number]>;
+  mission_status: string;
+}
+
 export interface DustStormState {
   active: boolean;
   x: number;
@@ -64,6 +84,7 @@ export interface SatelliteState {
   score: number;
   decision_reason: string;
   capabilities: string[];
+  target_rover_id?: string | null;
 }
 
 export interface CovarianceEllipse {
@@ -206,6 +227,8 @@ export interface SimulationFullState {
   active_mode: 'MODE_A' | 'MODE_B' | 'MODE_C';
   shadow_race_enabled: boolean;
   shadow_rover?: ShadowRoverState | null;
+  swarm_mode_enabled: boolean;
+  swarm_rovers?: SwarmRoverState[];
   terrain_preset: 'procedural' | 'jezero_crater';
   dust_storm: DustStormState;
   mode_meta: {

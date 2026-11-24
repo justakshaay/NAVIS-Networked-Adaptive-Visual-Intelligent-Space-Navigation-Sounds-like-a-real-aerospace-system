@@ -126,6 +126,28 @@ export const SatellitePanel: React.FC<SatellitePanelProps> = ({ satellites, aiSc
                 <span>AI UTILITY SCORE</span>
                 <span className="text-[#E6EDF3] font-bold">{score.toFixed(2)}</span>
               </div>
+
+              {/* Swarm Target Rover Allocation */}
+              {sat.target_rover_id && sat.is_visible && sat.current_task !== 'IDLE' && (
+                <div className="flex items-center justify-between text-[9px] mt-1.5 pt-1 border-t border-[#21262D]">
+                  <span className="text-[#8B949E]">SERVING:</span>
+                  <span
+                    className={`font-bold px-1.5 py-0.2 rounded-[2px] ${
+                      sat.target_rover_id === 'ROVER-1'
+                        ? 'bg-[#58A6FF]/15 text-[#58A6FF] border border-[#58A6FF]/40'
+                        : sat.target_rover_id === 'ROVER-2'
+                        ? 'bg-[#2EA043]/15 text-[#2EA043] border border-[#2EA043]/40'
+                        : 'bg-[#BC8CFF]/15 text-[#BC8CFF] border border-[#BC8CFF]/40'
+                    }`}
+                  >
+                    {sat.target_rover_id === 'ROVER-1'
+                      ? 'ROVER-1 (ALPHA)'
+                      : sat.target_rover_id === 'ROVER-2'
+                      ? 'ROVER-2 (BETA)'
+                      : 'ROVER-3 (GAMMA)'}
+                  </span>
+                </div>
+              )}
             </div>
           );
         })}
